@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! Receipt v2
 
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};

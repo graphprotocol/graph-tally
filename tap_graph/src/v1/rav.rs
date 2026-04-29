@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! # Receipt Aggregate Voucher
 //!
 //! Receipts Aggregate Voucher or RAV is the struct that is sent to the

@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! Point of entry for managing TAP receipts and RAVs.
 //!
 //! The [`crate::manager`] module provides facilities for managing TAP receipt

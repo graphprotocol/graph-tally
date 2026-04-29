@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! Module containing error and warning codes used by the TAP aggregator JSON-RPC API.
 //!
 //! The JSON-RPC spec allocates error codes in the range `[-32000, -32099]` for application errors. We chose to use that

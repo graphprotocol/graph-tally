@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 use std::{net::SocketAddr, panic};
 
 use axum::{http::StatusCode, response::IntoResponse, routing::get, serve, Router};

@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 use std::{collections::HashSet, fmt::Debug, str::FromStr, time::Duration};
 
 use anyhow::Result;

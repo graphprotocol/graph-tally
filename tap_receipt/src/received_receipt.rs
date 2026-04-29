@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! Module containing Receipt with metadata for tracking receipt throught its lifecycle
 //!
 //! This module contains the `ReceivedReceipt` struct and associated enums `ReceiptState` and

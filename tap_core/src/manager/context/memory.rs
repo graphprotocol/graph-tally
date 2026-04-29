@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! In-memory context implementation for the TAP manager.
 //!
 //! This module provides an in-memory implementation of the TAP manager context.
