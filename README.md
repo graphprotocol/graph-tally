@@ -81,4 +81,4 @@ system being off-chain.
 
 Contributions are welcome! Please submit a pull request or open an issue to 
 discuss potential changes.
-Also, make sure to follow the [Contributing Guide](https://github.com/semiotic-ai/timeline-aggregation-protocol/blob/main/CONTRIBUTING.md).
+Also, make sure to follow the [Contributing Guide](https://github.com/graphprotocol/timeline-aggregation-protocol/blob/main/CONTRIBUTING.md).
