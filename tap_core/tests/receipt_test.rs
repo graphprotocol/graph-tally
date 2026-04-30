@@ -186,8 +186,9 @@ fn safe_truncate_receipts_test(
     #[case] limit: u64,
     #[case] expected: Vec<u64>,
 ) {
-    use rand::{rng, seq::SliceRandom};
     use std::str::FromStr;
+
+    use rand::{rng, seq::SliceRandom};
 
     let domain_separator = tap_eip712_domain(1, Address::from([0x11u8; 20]));
     let collection_id = FixedBytes::from([0xab; 32]);
