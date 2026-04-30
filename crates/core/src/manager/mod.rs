@@ -80,6 +80,6 @@
 pub mod adapters;
 #[cfg(feature = "in_memory")]
 pub mod context;
-mod manager;
+mod core;
 
-pub use manager::Manager;
+pub use core::Manager;
