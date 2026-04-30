@@ -5,13 +5,17 @@
 //!
 //! # Example
 //! ```rust
-//! # use thegraph_core::alloy::{dyn_abi::Eip712Domain, primitives::Address, signers::local::PrivateKeySigner};
+//! # use thegraph_core::alloy::{dyn_abi::Eip712Domain, primitives::{Address, FixedBytes}, signers::local::PrivateKeySigner};
 //! # use tap_graph::{Receipt};
 //! # let domain_separator = Eip712Domain::default();
 //! use tap_core::signed_message::Eip712SignedMessage;
 //! # let wallet = PrivateKeySigner::random();
 //! # let wallet_address = wallet.address();
-//! # let message = Receipt::new(Address::from([0x11u8; 20]), 100).unwrap();
+//! # let collection_id = FixedBytes::from([0xab; 32]);
+//! # let payer = Address::from([0x11u8; 20]);
+//! # let data_service = Address::from([0x22u8; 20]);
+//! # let service_provider = Address::from([0x33u8; 20]);
+//! # let message = Receipt::new(collection_id, payer, data_service, service_provider, 100).unwrap();
 //!
 //! let signed_message = Eip712SignedMessage::new(&domain_separator, message, &wallet).unwrap();
 //! let signer = signed_message.recover_signer(&domain_separator).unwrap();

@@ -1,4 +1,4 @@
-//! # Receipt Aggregate Voucher v2
+//! # Receipt Aggregate Voucher
 
 use std::cmp;
 
@@ -14,7 +14,7 @@ use thegraph_core::alloy::{
     sol,
 };
 
-use super::{Receipt, SignedReceipt};
+use crate::{Receipt, SignedReceipt};
 
 /// EIP712 signed message for ReceiptAggregateVoucher
 pub type SignedRav = Eip712SignedMessage<ReceiptAggregateVoucher>;

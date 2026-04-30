@@ -1,9 +1,4 @@
-//! Module containing Receipt type used for providing and verifying a payment
-//!
-//! Receipts are used as single transaction promise of payment. A payment sender
-//! creates a receipt and ECDSA signs it, then sends it to a payment receiver.
-//! The payment receiver would verify the received receipt and store it to be
-//! accumulated with other received receipts in the future.
+//! Receipt
 
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
 
@@ -11,17 +6,28 @@ use rand::{rng, Rng};
 use serde::{Deserialize, Serialize};
 use tap_eip712_message::Eip712SignedMessage;
 use tap_receipt::WithValueAndTimestamp;
-use thegraph_core::alloy::{primitives::Address, sol};
+use thegraph_core::alloy::{
+    primitives::{Address, FixedBytes},
+    sol,
+};
 
-/// A Receipt wrapped in an Eip712SignedMessage
+/// A signed receipt message
 pub type SignedReceipt = Eip712SignedMessage<Receipt>;
 
 sol! {
-    /// Receipt struct used to pay for an off-chain service
+    /// Holds information needed for promise of payment signed with ECDSA
     #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
     struct Receipt {
-        /// Unique allocation id this receipt belongs to
-        address allocation_id;
+        /// Unique collection id this receipt belongs to
+        bytes32 collection_id;
+
+        // The address of the payer the RAV was issued by
+        address payer;
+        // The address of the data service the RAV was issued to
+        address data_service;
+        // The address of the service provider the RAV was issued to
+        address service_provider;
+
         /// Unix Epoch timestamp in nanoseconds (Truncated to 64-bits)
         uint64 timestamp_ns;
         /// Random value used to avoid collisions from multiple receipts with one timestamp
@@ -34,14 +40,22 @@ sol! {
 fn get_current_timestamp_u64_ns() -> Result<u64, SystemTimeError> {
     Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as u64)
 }
-
 impl Receipt {
     /// Returns a receipt with provided values
-    pub fn new(allocation_id: Address, value: u128) -> Result<Self, SystemTimeError> {
+    pub fn new(
+        collection_id: FixedBytes<32>,
+        payer: Address,
+        data_service: Address,
+        service_provider: Address,
+        value: u128,
+    ) -> Result<Self, SystemTimeError> {
         let timestamp_ns = get_current_timestamp_u64_ns()?;
         let nonce = rng().random::<u64>();
         Ok(Self {
-            allocation_id,
+            collection_id,
+            payer,
+            data_service,
+            service_provider,
             timestamp_ns,
             nonce,
             value,
@@ -61,32 +75,52 @@ impl WithValueAndTimestamp for Receipt {
 
 #[cfg(test)]
 mod receipt_unit_test {
-    use std::{
-        str::FromStr,
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use rstest::*;
+    use thegraph_core::alloy::primitives::{address, fixed_bytes};
 
     use super::*;
 
     #[fixture]
-    fn allocation_ids() -> Vec<Address> {
-        vec![
-            Address::from_str("0xabababababababababababababababababababab").unwrap(),
-            Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap(),
-            Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap(),
-            Address::from_str("0x1234567890abcdef1234567890abcdef12345678").unwrap(),
-        ]
+    fn collection_id() -> FixedBytes<32> {
+        fixed_bytes!("deaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddeaddead")
+    }
+
+    #[fixture]
+    fn payer() -> Address {
+        address!("abababababababababababababababababababab")
+    }
+
+    #[fixture]
+    fn data_service() -> Address {
+        address!("deaddeaddeaddeaddeaddeaddeaddeaddeaddead")
+    }
+
+    #[fixture]
+    fn service_provider() -> Address {
+        address!("beefbeefbeefbeefbeefbeefbeefbeefbeefbeef")
+    }
+
+    #[fixture]
+    fn value() -> u128 {
+        1234
+    }
+
+    #[fixture]
+    fn receipt(
+        collection_id: FixedBytes<32>,
+        payer: Address,
+        data_service: Address,
+        service_provider: Address,
+        value: u128,
+    ) -> Receipt {
+        Receipt::new(collection_id, payer, data_service, service_provider, value).unwrap()
     }
 
     #[rstest]
-    fn test_new_receipt(allocation_ids: Vec<Address>) {
-        let value = 1234;
-
-        let receipt = Receipt::new(allocation_ids[0], value).unwrap();
-
-        assert_eq!(receipt.allocation_id, allocation_ids[0]);
+    fn test_new_receipt(collection_id: FixedBytes<32>, value: u128, receipt: Receipt) {
+        assert_eq!(receipt.collection_id, collection_id);
         assert_eq!(receipt.value, value);
 
         // Check that the timestamp is within a reasonable range
@@ -99,11 +133,10 @@ mod receipt_unit_test {
     }
 
     #[rstest]
-    fn test_unique_nonce_and_timestamp(allocation_ids: Vec<Address>) {
-        let value = 1234;
-
-        let receipt1 = Receipt::new(allocation_ids[0], value).unwrap();
-        let receipt2 = Receipt::new(allocation_ids[0], value).unwrap();
+    fn test_unique_nonce_and_timestamp(
+        #[from(receipt)] receipt1: Receipt,
+        #[from(receipt)] receipt2: Receipt,
+    ) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Current system time should be greater than `UNIX_EPOCH`")

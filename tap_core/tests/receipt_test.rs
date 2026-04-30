@@ -9,16 +9,18 @@ use tap_core::{
     manager::{adapters::ReceiptStore, context::memory::InMemoryContext},
     receipt::{checks::StatefulTimestampCheck, state::Checking, ReceiptWithState},
     signed_message::Eip712SignedMessage,
-    tap_eip712_domain, TapVersion,
+    tap_eip712_domain,
 };
 use tap_graph::{Receipt, SignedReceipt};
 use thegraph_core::alloy::{
-    dyn_abi::Eip712Domain, primitives::Address, signers::local::PrivateKeySigner,
+    dyn_abi::Eip712Domain,
+    primitives::{Address, FixedBytes},
+    signers::local::PrivateKeySigner,
 };
 
 #[fixture]
 fn domain_separator() -> Eip712Domain {
-    tap_eip712_domain(1, Address::from([0x11u8; 20]), TapVersion::V1)
+    tap_eip712_domain(1, Address::from([0x11u8; 20]))
 }
 
 #[fixture]
@@ -36,19 +38,44 @@ fn context() -> InMemoryContext {
     )
 }
 
+#[fixture]
+fn collection_id() -> FixedBytes<32> {
+    FixedBytes::from([0xab; 32])
+}
+
+#[fixture]
+fn payer() -> Address {
+    Address::from_str("0xabababababababababababababababababababab").unwrap()
+}
+
+#[fixture]
+fn data_service() -> Address {
+    Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap()
+}
+
+#[fixture]
+fn service_provider() -> Address {
+    Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap()
+}
+
 #[rstest]
 #[tokio::test]
-async fn receipt_adapter_test(domain_separator: Eip712Domain, mut context: InMemoryContext) {
+async fn receipt_adapter_test(
+    domain_separator: Eip712Domain,
+    mut context: InMemoryContext,
+    collection_id: FixedBytes<32>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
+) {
     let wallet = PrivateKeySigner::random();
-
-    let allocation_id = Address::from_str("0xabababababababababababababababababababab").unwrap();
 
     // Create receipts
     let value = 100u128;
     let received_receipt = ReceiptWithState::new(
         Eip712SignedMessage::new(
             &domain_separator,
-            Receipt::new(allocation_id, value).unwrap(),
+            Receipt::new(collection_id, payer, data_service, service_provider, value).unwrap(),
             &wallet,
         )
         .unwrap(),
@@ -77,10 +104,15 @@ async fn receipt_adapter_test(domain_separator: Eip712Domain, mut context: InMem
 
 #[rstest]
 #[tokio::test]
-async fn multi_receipt_adapter_test(domain_separator: Eip712Domain, mut context: InMemoryContext) {
+async fn multi_receipt_adapter_test(
+    domain_separator: Eip712Domain,
+    mut context: InMemoryContext,
+    collection_id: FixedBytes<32>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
+) {
     let wallet = PrivateKeySigner::random();
-
-    let allocation_id = Address::from_str("0xabababababababababababababababababababab").unwrap();
 
     // Create receipts
     let mut received_receipts = Vec::new();
@@ -88,7 +120,7 @@ async fn multi_receipt_adapter_test(domain_separator: Eip712Domain, mut context:
         received_receipts.push(ReceiptWithState::new(
             Eip712SignedMessage::new(
                 &domain_separator,
-                Receipt::new(allocation_id, value).unwrap(),
+                Receipt::new(collection_id, payer, data_service, service_provider, value).unwrap(),
                 &wallet,
             )
             .unwrap(),
@@ -150,13 +182,19 @@ async fn multi_receipt_adapter_test(domain_separator: Eip712Domain, mut context:
 #[case(vec![1, 1, 1, 1, 2, 3], 3, vec![])]
 #[test]
 fn safe_truncate_receipts_test(
-    domain_separator: Eip712Domain,
     #[case] input: Vec<u64>,
     #[case] limit: u64,
     #[case] expected: Vec<u64>,
 ) {
+    use std::str::FromStr;
+
     use rand::{rng, seq::SliceRandom};
 
+    let domain_separator = tap_eip712_domain(1, Address::from([0x11u8; 20]));
+    let collection_id = FixedBytes::from([0xab; 32]);
+    let payer = Address::from_str("0xabababababababababababababababababababab").unwrap();
+    let data_service = Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap();
+    let service_provider = Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap();
     let wallet = PrivateKeySigner::random();
 
     // Vec of (id, receipt)
@@ -168,10 +206,13 @@ fn safe_truncate_receipts_test(
             Eip712SignedMessage::new(
                 &domain_separator,
                 Receipt {
-                    allocation_id: Address::ZERO,
+                    collection_id,
                     timestamp_ns: *timestamp,
                     nonce: 0,
                     value: 0,
+                    payer,
+                    data_service,
+                    service_provider,
                 },
                 &wallet,
             )

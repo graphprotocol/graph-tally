@@ -45,15 +45,15 @@ pub enum Error {
     #[error("Failed to produce rav request, no valid receipts")]
     NoValidReceiptsForRavRequest,
 
-    /// Error when the previous RAV allocation id does not match the allocation id from the new receipt
-    #[error("Previous RAV allocation id ({prev_id}) doesn't match the allocation id from the new receipt ({new_id}).")]
-    RavAllocationIdMismatch { prev_id: String, new_id: String },
+    /// Error when the previous RAV collection id does not match the collection id from the new receipt
+    #[error("Previous RAV collection id ({prev_id}) doesn't match the collection id from the new receipt ({new_id}).")]
+    RavCollectionIdMismatch { prev_id: String, new_id: String },
 
-    /// Error when all receipts do not have the same allocation id
+    /// Error when all receipts do not have the same collection id
     ///
     /// Used in tap_aggregator
-    #[error("All receipts should have the same allocation id, but they don't")]
-    RavAllocationIdNotUniform,
+    #[error("All receipts should have the same collection id, but they don't")]
+    RavCollectionIdNotUniform,
     /// Error when the receipt signature is duplicated.
     ///
     /// Used in tap_aggregator
