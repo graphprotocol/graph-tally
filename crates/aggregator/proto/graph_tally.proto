@@ -1,7 +1,12 @@
 syntax = "proto3";
-package tap_aggregator.v2;
+package graph_tally;
 
-import "uint128.proto";
+message Uint128 {
+  // Highest 64 bits of a 128 bit number.
+  uint64 high = 1;
+  // Lowest 64 bits of a 128 bit number.
+  uint64 low = 2;
+}
 
 message Receipt {
   bytes collection_id = 1;
@@ -10,7 +15,7 @@ message Receipt {
   bytes service_provider = 4;
   uint64 timestamp_ns = 5;
   uint64 nonce = 6;
-  grpc.uint128.Uint128 value = 7;
+  Uint128 value = 7;
 }
 
 message SignedReceipt {
@@ -24,7 +29,7 @@ message ReceiptAggregateVoucher {
   bytes data_service = 3;
   bytes service_provider = 4;
   uint64 timestamp_ns = 5;
-  grpc.uint128.Uint128 value_aggregate = 6;
+  Uint128 value_aggregate = 6;
   bytes metadata = 7;
 }
 
@@ -42,7 +47,6 @@ message RavResponse {
   SignedRav rav = 1;
 }
 
-service TapAggregator {
+service GraphTallyAggregator {
   rpc AggregateReceipts(RavRequest) returns (RavResponse);
 }
-

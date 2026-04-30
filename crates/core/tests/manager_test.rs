@@ -18,6 +18,7 @@ fn get_current_timestamp_u64_ns() -> anyhow::Result<u64> {
 }
 
 use graph_tally_core::{
+    graph_tally_eip712_domain,
     manager::{
         adapters::ReceiptRead,
         context::memory::{
@@ -31,7 +32,6 @@ use graph_tally_core::{
         Context, ReceiptWithState,
     },
     signed_message::Eip712SignedMessage,
-    tap_eip712_domain,
 };
 use graph_tally_graph::{Receipt, ReceiptAggregateVoucher, SignedReceipt};
 
@@ -81,7 +81,7 @@ fn sender_ids(signer: PrivateKeySigner) -> (PrivateKeySigner, Vec<Address>) {
 
 #[fixture]
 fn domain_separator() -> Eip712Domain {
-    tap_eip712_domain(1, Address::from([0x11u8; 20]))
+    graph_tally_eip712_domain(1, Address::from([0x11u8; 20]))
 }
 
 struct ContextFixture {

@@ -5,13 +5,13 @@ use std::{
 };
 
 use graph_tally_core::{
+    graph_tally_eip712_domain,
     manager::{
         adapters::{RavRead, RavStore},
         context::memory::InMemoryContext,
     },
     receipt::checks::StatefulTimestampCheck,
     signed_message::Eip712SignedMessage,
-    tap_eip712_domain,
 };
 use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
 use rstest::*;
@@ -21,7 +21,7 @@ use thegraph_core::alloy::{dyn_abi::Eip712Domain, signers::local::PrivateKeySign
 
 #[fixture]
 fn domain_separator() -> Eip712Domain {
-    tap_eip712_domain(1, Address::from([0x11u8; 20]))
+    graph_tally_eip712_domain(1, Address::from([0x11u8; 20]))
 }
 
 #[fixture]

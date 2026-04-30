@@ -20,14 +20,16 @@ use tonic::{codec::CompressionEncoding, service::Routes, Request, Response, Stat
 use tower::{layer::util::Identity, make::Shared};
 use tower_http::timeout::TimeoutLayer;
 
+#[allow(deprecated)]
+use crate::grpc::v2;
 use crate::{
     aggregator,
     api_versioning::{
-        tap_rpc_api_versions_info, TapRpcApiVersion, TapRpcApiVersionsInfo,
-        TAP_RPC_API_VERSIONS_DEPRECATED,
+        graph_tally_rpc_api_versions_info, GraphTallyRpcApiVersion, GraphTallyRpcApiVersionsInfo,
+        GRAPH_TALLY_RPC_API_VERSIONS_DEPRECATED,
     },
     error_codes::{JsonRpcErrorCode, JsonRpcWarningCode},
-    grpc::v2,
+    grpc::graph_tally,
     jsonrpsee_helpers::{JsonRpcError, JsonRpcResponse, JsonRpcResult, JsonRpcWarning},
 };
 
@@ -86,7 +88,7 @@ lazy_static! {
 pub trait Rpc {
     /// Returns the versions of the TAP JSON-RPC API implemented by this server.
     #[method(name = "api_versions")]
-    fn api_versions(&self) -> JsonRpcResult<TapRpcApiVersionsInfo>;
+    fn api_versions(&self) -> JsonRpcResult<GraphTallyRpcApiVersionsInfo>;
 
     /// Returns the EIP-712 domain separator information used by this server.
     /// The client is able to verify the signatures of the receipts and receipt aggregate vouchers.
@@ -114,27 +116,27 @@ struct RpcImpl {
 
 /// Helper method that checks if the given API version is supported.
 /// Returns an error if the API version is not supported.
-fn parse_api_version(api_version: &str) -> Result<TapRpcApiVersion, JsonRpcError> {
-    TapRpcApiVersion::from_str(api_version).map_err(|_| {
+fn parse_api_version(api_version: &str) -> Result<GraphTallyRpcApiVersion, JsonRpcError> {
+    GraphTallyRpcApiVersion::from_str(api_version).map_err(|_| {
         jsonrpsee::types::ErrorObject::owned(
             JsonRpcErrorCode::InvalidVersion as i32,
             format!("Unsupported API version: \"{api_version}\"."),
-            Some(tap_rpc_api_versions_info()),
+            Some(graph_tally_rpc_api_versions_info()),
         )
     })
 }
 
 /// Helper method that checks if the given API version has a deprecation warning.
 /// Returns a warning if the API version is deprecated.
-fn check_api_version_deprecation(api_version: &TapRpcApiVersion) -> Option<JsonRpcWarning> {
-    if TAP_RPC_API_VERSIONS_DEPRECATED.contains(api_version) {
+fn check_api_version_deprecation(api_version: &GraphTallyRpcApiVersion) -> Option<JsonRpcWarning> {
+    if GRAPH_TALLY_RPC_API_VERSIONS_DEPRECATED.contains(api_version) {
         Some(JsonRpcWarning::new(
             JsonRpcWarningCode::DeprecatedVersion as i32,
             format!(
                 "The API version {api_version} will be deprecated. \
                 Please check https://github.com/graphprotocol/timeline_aggregation_protocol for more information."
             ),
-            Some(tap_rpc_api_versions_info()),
+            Some(graph_tally_rpc_api_versions_info()),
         ))
     } else {
         None
@@ -196,6 +198,7 @@ fn aggregate_receipts_(
     }
 }
 
+#[allow(deprecated)]
 #[tonic::async_trait]
 impl v2::tap_aggregator_server::TapAggregator for RpcImpl {
     async fn aggregate_receipts(
@@ -252,9 +255,65 @@ impl v2::tap_aggregator_server::TapAggregator for RpcImpl {
     }
 }
 
+#[tonic::async_trait]
+impl graph_tally::graph_tally_aggregator_server::GraphTallyAggregator for RpcImpl {
+    async fn aggregate_receipts(
+        &self,
+        request: Request<graph_tally::RavRequest>,
+    ) -> Result<Response<graph_tally::RavResponse>, Status> {
+        let rav_request = request.into_inner();
+        let receipts: Vec<graph_tally_graph::SignedReceipt> = rav_request
+            .receipts
+            .into_iter()
+            .map(TryFrom::try_from)
+            .collect::<Result<_, _>>()
+            .map_err(|_| Status::invalid_argument("Error while getting list of signed_receipts"))?;
+
+        let previous_rav = rav_request
+            .previous_rav
+            .map(TryFrom::try_from)
+            .transpose()
+            .map_err(|_| Status::invalid_argument("Error while getting previous rav"))?;
+
+        let receipts_grt: u128 = receipts.iter().map(|r| r.message.value).sum();
+        let receipts_count: u64 = receipts.len() as u64;
+
+        match aggregator::check_and_aggregate_receipts(
+            &self.domain_separator,
+            receipts.as_slice(),
+            previous_rav,
+            &self.wallet,
+            &self.accepted_addresses,
+        ) {
+            Ok(res) => {
+                TOTAL_GRT_AGGREGATED.inc_by(receipts_grt as f64);
+                TOTAL_AGGREGATED_RECEIPTS.inc_by(receipts_count);
+                AGGREGATION_SUCCESS_COUNTER.inc();
+                if let Some(kafka) = &self.kafka {
+                    produce_kafka_records(
+                        kafka,
+                        &res.message.payer,
+                        &res.message.collectionId,
+                        res.message.valueAggregate,
+                    );
+                }
+
+                let response = graph_tally::RavResponse {
+                    rav: Some(res.into()),
+                };
+                Ok(Response::new(response))
+            }
+            Err(e) => {
+                AGGREGATION_FAILURE_COUNTER.inc();
+                Err(Status::failed_precondition(e.to_string()))
+            }
+        }
+    }
+}
+
 impl RpcServer for RpcImpl {
-    fn api_versions(&self) -> JsonRpcResult<TapRpcApiVersionsInfo> {
-        Ok(JsonRpcResponse::ok(tap_rpc_api_versions_info()))
+    fn api_versions(&self) -> JsonRpcResult<GraphTallyRpcApiVersionsInfo> {
+        Ok(JsonRpcResponse::ok(graph_tally_rpc_api_versions_info()))
     }
 
     fn eip712_domain_info(&self) -> JsonRpcResult<Eip712Domain> {
@@ -417,11 +476,19 @@ async fn shutdown_handler() {
 }
 
 fn create_grpc_service(rpc_impl: RpcImpl) -> Result<Routes> {
-    let grpc_service = Routes::new(
-        v2::tap_aggregator_server::TapAggregatorServer::new(rpc_impl)
-            .accept_compressed(CompressionEncoding::Zstd),
-    )
-    .prepare();
+    // Register both the new GraphTallyAggregator and legacy TapAggregator services
+    // The same implementation backs both services
+    #[allow(deprecated)]
+    let legacy_service = v2::tap_aggregator_server::TapAggregatorServer::new(rpc_impl.clone())
+        .accept_compressed(CompressionEncoding::Zstd);
+
+    let new_service =
+        graph_tally::graph_tally_aggregator_server::GraphTallyAggregatorServer::new(rpc_impl)
+            .accept_compressed(CompressionEncoding::Zstd);
+
+    let grpc_service = Routes::new(legacy_service)
+        .add_service(new_service)
+        .prepare();
 
     Ok(grpc_service)
 }
@@ -479,7 +546,7 @@ fn produce_kafka_records<K: Debug>(
 mod tests {
     use std::{collections::HashSet, str::FromStr, time::Duration};
 
-    use graph_tally_core::{signed_message::Eip712SignedMessage, tap_eip712_domain};
+    use graph_tally_core::{graph_tally_eip712_domain, signed_message::Eip712SignedMessage};
     use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
     use jsonrpsee::{core::client::ClientT, http_client::HttpClientBuilder, rpc_params};
     use rstest::*;
@@ -525,7 +592,7 @@ mod tests {
 
     #[fixture]
     fn domain_separator() -> Eip712Domain {
-        tap_eip712_domain(1, Address::from([0x11u8; 20]))
+        graph_tally_eip712_domain(1, Address::from([0x11u8; 20]))
     }
 
     #[fixture]
@@ -579,7 +646,7 @@ mod tests {
         let client = HttpClientBuilder::default()
             .build(format!("http://127.0.0.1:{}", local_addr.port()))
             .unwrap();
-        let _: server::JsonRpcResponse<server::TapRpcApiVersionsInfo> = client
+        let _: server::JsonRpcResponse<server::GraphTallyRpcApiVersionsInfo> = client
             .request("api_versions", rpc_params!(None::<()>))
             .await
             .unwrap();
@@ -851,11 +918,11 @@ mod tests {
         // Check the API versions returned by the server
         match res.expect_err("Expected an error") {
             jsonrpsee::core::ClientError::Call(err) => {
-                let versions: server::TapRpcApiVersionsInfo =
+                let versions: server::GraphTallyRpcApiVersionsInfo =
                     serde_json::from_str(err.data().unwrap().get()).unwrap();
                 assert!(versions
                     .versions_supported
-                    .contains(&server::TapRpcApiVersion::V0_0));
+                    .contains(&server::GraphTallyRpcApiVersion::V0_0));
             }
             _ => panic!("Expected data in error"),
         }

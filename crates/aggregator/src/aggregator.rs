@@ -184,7 +184,7 @@ fn check_receipt_timestamps(
 
 #[cfg(test)]
 mod tests {
-    use graph_tally_core::{signed_message::Eip712SignedMessage, tap_eip712_domain};
+    use graph_tally_core::{graph_tally_eip712_domain, signed_message::Eip712SignedMessage};
     use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
     use rstest::*;
     use thegraph_core::alloy::{
@@ -226,7 +226,7 @@ mod tests {
     }
     #[fixture]
     fn domain_separator() -> Eip712Domain {
-        tap_eip712_domain(1, Address::from([0x11u8; 20]))
+        graph_tally_eip712_domain(1, Address::from([0x11u8; 20]))
     }
 
     #[rstest]

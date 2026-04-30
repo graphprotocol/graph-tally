@@ -45,7 +45,10 @@ fn get_current_timestamp_u64_ns() -> Result<u64> {
 /// - `version`: "1"
 /// - `chain_id`: The chain ID of the chain where the domain separator is deployed.
 /// - `verifying_contract`: The address of the contract that is verifying the signature.
-pub fn tap_eip712_domain(chain_id: u64, verifying_contract_address: Address) -> Eip712Domain {
+pub fn graph_tally_eip712_domain(
+    chain_id: u64,
+    verifying_contract_address: Address,
+) -> Eip712Domain {
     eip712_domain! {
         name: "GraphTallyCollector",
         version: "1",
@@ -66,7 +69,7 @@ mod tap_tests {
         signers::local::PrivateKeySigner,
     };
 
-    use crate::{signed_message::Eip712SignedMessage, tap_eip712_domain};
+    use crate::{graph_tally_eip712_domain, signed_message::Eip712SignedMessage};
 
     #[fixture]
     fn keys() -> (PrivateKeySigner, Address) {
@@ -98,7 +101,7 @@ mod tap_tests {
 
     #[fixture]
     fn domain_separator() -> Eip712Domain {
-        tap_eip712_domain(1, Address::from([0x11u8; 20]))
+        graph_tally_eip712_domain(1, Address::from([0x11u8; 20]))
     }
 
     #[rstest]
