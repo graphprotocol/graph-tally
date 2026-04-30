@@ -199,7 +199,7 @@ where
         .create_rav_request(&Context::new(), time_stamp_buffer, None)
         .await?;
 
-    // To-do: Need to add previous RAV, when tap_manager supports replacing receipts
+    // To-do: Need to add previous RAV, when Manager supports replacing receipts
     let params = rpc_params!(
         &aggregator_client.1,
         &rav_request

@@ -1,5 +1,5 @@
 // These tests simulate a Sender sending query requests and receipts to one or two Indexers.
-// The tests use a mock Indexer server running a tap_manager instance and a graph_tally_aggregator to handle RAV requests.
+// The tests use a mock Indexer server running a Manager instance and a graph_tally_aggregator to handle RAV requests.
 // An Indexer checks and stores receipts. After receiving a specific number of receipts, the Indexer sends a RAV request to the aggregator.
 use std::{
     collections::{HashMap, HashSet},
@@ -211,7 +211,7 @@ fn indexer_2_context(context: ContextFixture) -> ContextFixture {
 }
 
 // Helper fixture to generate a batch of receipts to be sent to the Indexer.
-// Messages are formatted according to TAP spec and signed according to EIP-712.
+// Messages are formatted according to Graph Tally spec and signed according to EIP-712.
 #[fixture]
 fn requests_1(
     keys_sender: PrivateKeySigner,
@@ -665,7 +665,7 @@ async fn test_manager_wrong_requestor_keys(
 
 #[rstest]
 #[tokio::test]
-async fn test_tap_manager_rav_timestamp_cuttoff(
+async fn test_manager_rav_timestamp_cutoff(
     #[future] two_indexers_test_servers: Result<
         (
             ServerHandle,

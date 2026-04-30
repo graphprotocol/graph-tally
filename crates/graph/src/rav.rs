@@ -33,7 +33,7 @@ sol! {
         address serviceProvider;
         // The address of the data service the RAV was issued to
         address dataService;
-        // The RAV timestamp, indicating the latest TAP Receipt in the RAV
+        // The RAV timestamp, indicating the latest Graph Tally Receipt in the RAV
         uint64 timestampNs;
         // Total amount owed to the service provider since the beginning of the
         // payer-service provider relationship, including all debt that is already paid for.
