@@ -231,7 +231,7 @@ mod tests {
 
     fn create_test_domain_separator() -> Eip712Domain {
         eip712_domain! {
-            name: "TAP",
+            name: "GraphTallyCollector",
             version: "1",
             chain_id: 1,
             verifying_contract: Address:: from([0x11u8; 20]),

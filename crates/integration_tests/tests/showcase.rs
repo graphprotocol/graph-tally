@@ -701,7 +701,7 @@ async fn test_manager_rav_timestamp_cutoff(
             client_1.request("request", (receipt_1,)).await;
 
         // The first receipt in the second batch has the same timestamp as the last receipt in the first batch.
-        // TAP manager should ignore this receipt when creating the second RAV request.
+        // Manager should ignore this receipt when creating the second RAV request.
         // The indexer_mock will throw an error if the number of receipts in RAV request is less than the expected number.
         // An error is expected when requesting the second RAV.
         if counter == 2 * receipt_threshold_1 {
