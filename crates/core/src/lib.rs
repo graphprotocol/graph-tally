@@ -1,4 +1,8 @@
-#![doc = include_str!("../README.md")]
+//! # Graph Tally Core
+//!
+//! Core library for the Graph Tally protocol: a fast, efficient and trustless
+//! unidirectional micro-payments system.
+//!
 //! ## Getting started
 //!
 //! To get started with the TAP protocol, take a look on the [`manager`] module
