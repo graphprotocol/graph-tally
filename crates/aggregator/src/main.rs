@@ -11,16 +11,60 @@ use thegraph_core::alloy::{
     dyn_abi::Eip712Domain, primitives::Address, signers::local::PrivateKeySigner,
 };
 
+/// Deprecated environment variable mappings (old -> new)
+const DEPRECATED_ENV_VARS: &[(&str, &str)] = &[
+    ("TAP_PORT", "GRAPH_TALLY_PORT"),
+    ("TAP_PRIVATE_KEY", "GRAPH_TALLY_PRIVATE_KEY"),
+    ("TAP_PUBLIC_KEYS", "GRAPH_TALLY_PUBLIC_KEYS"),
+    (
+        "TAP_MAX_REQUEST_BODY_SIZE",
+        "GRAPH_TALLY_MAX_REQUEST_BODY_SIZE",
+    ),
+    (
+        "TAP_MAX_RESPONSE_BODY_SIZE",
+        "GRAPH_TALLY_MAX_RESPONSE_BODY_SIZE",
+    ),
+    ("TAP_MAX_CONNECTIONS", "GRAPH_TALLY_MAX_CONNECTIONS"),
+    (
+        "TAP_REQUEST_TIMEOUT_SECS",
+        "GRAPH_TALLY_REQUEST_TIMEOUT_SECS",
+    ),
+    ("TAP_METRICS_PORT", "GRAPH_TALLY_METRICS_PORT"),
+    ("TAP_DOMAIN_CHAIN_ID", "GRAPH_TALLY_DOMAIN_CHAIN_ID"),
+    (
+        "TAP_DOMAIN_VERIFYING_CONTRACT",
+        "GRAPH_TALLY_DOMAIN_VERIFYING_CONTRACT",
+    ),
+    ("TAP_KAFKA_CONFIG", "GRAPH_TALLY_KAFKA_CONFIG"),
+];
+
+/// Checks for deprecated TAP_* environment variables and migrates them to GRAPH_TALLY_*.
+/// Prints warnings for any deprecated variables found.
+fn migrate_deprecated_env_vars() {
+    for (old, new) in DEPRECATED_ENV_VARS {
+        if let Ok(value) = std::env::var(old) {
+            eprintln!(
+                "WARNING: Environment variable {} is deprecated, use {} instead",
+                old, new
+            );
+            // Only set the new var if it's not already set
+            if std::env::var(new).is_err() {
+                std::env::set_var(new, value);
+            }
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Port to listen on for JSON-RPC requests.
     /// Defaults to 8080.
-    #[arg(long, default_value_t = 8080, env = "TAP_PORT")]
+    #[arg(long, default_value_t = 8080, env = "GRAPH_TALLY_PORT")]
     port: u16,
 
     /// Signer private key for signing Receipt Aggregate Vouchers, as a hex string.
-    #[arg(long, env = "TAP_PRIVATE_KEY")]
+    #[arg(long, env = "GRAPH_TALLY_PRIVATE_KEY")]
     private_key: String,
 
     /// Signer public keys. Not the counterpart of the signer private key. Signers that are allowed
@@ -28,45 +72,45 @@ struct Args {
     /// were signed with a different key (e.g. a recent key rotation, or receipts coming from a
     /// different gateway / aggregator that use a different signing key).
     /// Expects a comma-separated list of Ethereum addresses.
-    #[arg(long, env = "TAP_PUBLIC_KEYS")]
+    #[arg(long, env = "GRAPH_TALLY_PUBLIC_KEYS")]
     public_keys: Option<Vec<Address>>,
 
     /// Maximum request body size in bytes.
     /// Defaults to 10MB.
-    #[arg(long, default_value_t = 10 * 1024 * 1024, env = "TAP_MAX_REQUEST_BODY_SIZE")]
+    #[arg(long, default_value_t = 10 * 1024 * 1024, env = "GRAPH_TALLY_MAX_REQUEST_BODY_SIZE")]
     max_request_body_size: u32,
 
     /// Maximum response body size in bytes.
     /// Defaults to 100kB.
-    #[arg(long, default_value_t = 100 * 1024, env = "TAP_MAX_RESPONSE_BODY_SIZE")]
+    #[arg(long, default_value_t = 100 * 1024, env = "GRAPH_TALLY_MAX_RESPONSE_BODY_SIZE")]
     max_response_body_size: u32,
 
     /// Maximum number of concurrent connections.
     /// Defaults to 32.
-    #[arg(long, default_value_t = 32, env = "TAP_MAX_CONNECTIONS")]
+    #[arg(long, default_value_t = 32, env = "GRAPH_TALLY_MAX_CONNECTIONS")]
     max_connections: u32,
 
     /// Maximum time in seconds allowed for processing a request.
     /// This timeout protects against Slowloris-style DoS attacks by ensuring
     /// that connections cannot be held open indefinitely.
     /// Defaults to 60 seconds.
-    #[arg(long, default_value_t = 60, env = "TAP_REQUEST_TIMEOUT_SECS")]
+    #[arg(long, default_value_t = 60, env = "GRAPH_TALLY_REQUEST_TIMEOUT_SECS")]
     request_timeout_secs: u64,
 
     /// Metrics server port.
     /// Defaults to 5000.
-    #[arg(long, default_value_t = 5000, env = "TAP_METRICS_PORT")]
+    #[arg(long, default_value_t = 5000, env = "GRAPH_TALLY_METRICS_PORT")]
     metrics_port: u16,
 
     /// Domain chain ID to be used for the EIP-712 domain separator.
-    #[arg(long, env = "TAP_DOMAIN_CHAIN_ID")]
+    #[arg(long, env = "GRAPH_TALLY_DOMAIN_CHAIN_ID")]
     domain_chain_id: Option<String>,
 
     /// Domain verifying contract to be used for the EIP-712 domain separator.
-    #[arg(long, env = "TAP_DOMAIN_VERIFYING_CONTRACT")]
+    #[arg(long, env = "GRAPH_TALLY_DOMAIN_VERIFYING_CONTRACT")]
     domain_verifying_contract: Option<Address>,
 
-    #[arg(long, env = "TAP_KAFKA_CONFIG")]
+    #[arg(long, env = "GRAPH_TALLY_KAFKA_CONFIG")]
     kafka_config: Option<String>,
 }
 
@@ -96,6 +140,9 @@ async fn main() -> Result<()> {
     // uses it, and it shows jsonrpsee log spans in the logs (to see client IP, etc).
     // See https://github.com/paritytech/jsonrpsee/pull/922 for more info.
     tracing_subscriber::fmt::init();
+
+    // Migrate deprecated TAP_* env vars to GRAPH_TALLY_* with warnings
+    migrate_deprecated_env_vars();
 
     let args = Args::parse();
     debug!("Settings: {args:?}");
@@ -153,7 +200,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Creates the TAP EIP-712 domain separator based on the provided arguments
+/// Creates the Graph Tally EIP-712 domain separator based on the provided arguments
 fn create_eip712_domain(args: &Args) -> Result<Eip712Domain> {
     if args.domain_chain_id.is_some() {
         debug!("Parsing domain chain ID...");
