@@ -46,11 +46,11 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["raw_value"] }
 strum = { version = "0.27.1", features = ["derive"] }
 rstest = "0.25.0"
-graph_tally_aggregator = { version = "1.0.0", path = "crates/aggregator" }
-graph_tally_eip712_message = { version = "1.0.0", path = "crates/eip712_message" }
-graph_tally_core = { version = "7.0.0", path = "crates/core" }
-graph_tally_graph = { version = "1.0.0", path = "crates/graph" }
-graph_tally_receipt = { version = "2.0.0", path = "crates/receipt" }
+graph_tally_aggregator = { version = "0.6.4", path = "crates/aggregator" }
+graph_tally_eip712_message = { version = "0.2.3", path = "crates/eip712_message" }
+graph_tally_core = { version = "6.0.3", path = "crates/core" }
+graph_tally_graph = { version = "0.3.5", path = "crates/graph" }
+graph_tally_receipt = { version = "1.1.4", path = "crates/receipt" }
 thegraph-core = "0.15.1"
 thiserror = "2.0.12"
 tokio = { version = "1.44.2", features = ["macros", "signal"] }

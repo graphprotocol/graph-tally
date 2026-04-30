@@ -1,6 +1,6 @@
 [package]
 name = "graph_tally_core"
-version = "7.0.0"
+version = "6.0.3"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
