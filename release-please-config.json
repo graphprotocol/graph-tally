@@ -11,6 +11,11 @@
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "prerelease": true
+    },
+    "crates/bin/escrow_manager": {
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "prerelease": true
     }
   },
   "plugins": [

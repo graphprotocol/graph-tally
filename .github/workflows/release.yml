@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       graph_tally_aggregator: ${{ steps.release-please.outputs['crates/bin/aggregator--tag_name'] }}
+      graph_tally_escrow_manager: ${{ steps.release-please.outputs['crates/bin/escrow_manager--tag_name'] }}
     steps:
       - name: Release please
         id: release-please
@@ -36,7 +37,7 @@ jobs:
     if: always() && (needs.release-please.result == 'success' || needs.release-please.result == 'skipped')
     strategy:
       matrix:
-        target: [graph_tally_aggregator]
+        target: [graph_tally_aggregator, graph_tally_escrow_manager]
     permissions:
       packages: write
     steps:
@@ -88,4 +89,4 @@ jobs:
           context: ./
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           tags: ${{ steps.meta.outputs.tags }}
-          file: Dockerfile.${{ matrix.target }}
+          file: docker/Dockerfile.${{ matrix.target }}

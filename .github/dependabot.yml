@@ -6,6 +6,11 @@ updates:
       interval: "daily"
 
   - package-ecosystem: "cargo"
+    directory: "/crates/bin/escrow_manager"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "cargo"
     directory: "/crates/core"
     schedule:
       interval: "daily"

@@ -1,0 +1,34 @@
+[package]
+name = "graph_tally_escrow_manager"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Manages Graph Tally escrow balances on behalf of a gateway sender."
+
+[[bin]]
+name = "graph_tally_escrow_manager"
+path = "src/main.rs"
+
+[dependencies]
+alloy = { version = "1.0.3", features = ["contract", "signer-local"] }
+anyhow.workspace = true
+axum.workspace = true
+chrono = { version = "0.4.34", default-features = false, features = ["clock"] }
+futures-util.workspace = true
+lazy_static.workspace = true
+prometheus.workspace = true
+prost.workspace = true
+rdkafka = { workspace = true, features = ["cmake-build", "gssapi", "tracing"] }
+reqwest = "0.12.5"
+serde.workspace = true
+serde_json.workspace = true
+serde_with = "3.4.0"
+snmalloc-rs = "0.3.4"
+thegraph-client-subgraphs = "0.3.2"
+titorelli = { git = "https://github.com/edgeandnode/titorelli.git", rev = "4c14fc1" }
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "time", "tracing"] }
+tracing = "0.1.40"
+tracing-subscriber.workspace = true

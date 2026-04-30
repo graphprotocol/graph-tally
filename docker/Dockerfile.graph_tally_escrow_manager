@@ -1,0 +1,28 @@
+FROM rust:1.91-bookworm AS build
+
+WORKDIR /root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang \
+    cmake \
+    libcurl4-openssl-dev \
+    librdkafka-dev \
+    libsasl2-dev \
+    libssl-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY . .
+
+RUN cargo build --release --bin graph_tally_escrow_manager
+
+########################################################################################
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libsasl2-dev libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /root/target/release/graph_tally_escrow_manager /usr/local/bin/graph_tally_escrow_manager
+
+ENTRYPOINT [ "/usr/local/bin/graph_tally_escrow_manager" ]
