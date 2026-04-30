@@ -12,7 +12,7 @@ anyhow.workspace = true
 anymap3.workspace = true
 async-trait.workspace = true
 serde.workspace = true
-graph_tally_eip712_message.workspace = true
+graph_tally_eip712_message = { path = "../eip712_message" }
 thegraph-core.workspace = true
 thiserror.workspace = true
 

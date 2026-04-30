@@ -11,9 +11,9 @@ description = "Core Graph Tally library: a fast, efficient and trustless unidire
 anyhow.workspace = true
 async-trait.workspace = true
 rand.workspace = true
-graph_tally_eip712_message.workspace = true
-graph_tally_graph = { workspace = true, optional = true }
-graph_tally_receipt.workspace = true
+graph_tally_eip712_message = { path = "../eip712_message" }
+graph_tally_graph = { path = "../graph", optional = true }
+graph_tally_receipt = { path = "../receipt" }
 thegraph-core.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
