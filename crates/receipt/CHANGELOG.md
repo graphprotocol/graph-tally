@@ -2,6 +2,34 @@
 
 
 
+## [2.0.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_receipt-v1.1.4...graph_tally_receipt-v2.0.0) (2026-04-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename docs
+* rename to grap tally
+
+### Features
+
+* bump for release ([#287](https://github.com/graphprotocol/graph-tally/issues/287)) ([3ba2620](https://github.com/graphprotocol/graph-tally/commit/3ba262076754e504d45e421ac3b46f4a517a774f))
+
+
+### Bug Fixes
+
+* revert cargo version bumping ([7afcd92](https://github.com/graphprotocol/graph-tally/commit/7afcd9231f3a592418b93f0061411df0e474a725))
+* stray references to tap ([4b491cf](https://github.com/graphprotocol/graph-tally/commit/4b491cfb9418f5bd8620025f9aecd31f2e994019))
+
+
+### Documentation
+
+* rename docs ([c2edaf6](https://github.com/graphprotocol/graph-tally/commit/c2edaf672b65010f27366f185ae518dfc2a1b4b0))
+
+
+### Code Refactoring
+
+* rename to grap tally ([4587f60](https://github.com/graphprotocol/graph-tally/commit/4587f60c69eecefccd717fa7bd38ddc0f140e788))
+
 ## [1.1.3](https://github.com/semiotic-ai/timeline-aggregation-protocol/compare/tap_receipt-v1.1.2...tap_receipt-v1.1.3) (2025-05-27)
 
 

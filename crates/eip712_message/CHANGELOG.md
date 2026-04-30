@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_eip712_message-v0.2.3...graph_tally_eip712_message-v1.0.0) (2026-04-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename to grap tally
+
+### Features
+
+* bump for release ([#287](https://github.com/graphprotocol/graph-tally/issues/287)) ([3ba2620](https://github.com/graphprotocol/graph-tally/commit/3ba262076754e504d45e421ac3b46f4a517a774f))
+
+
+### Bug Fixes
+
+* revert cargo version bumping ([7afcd92](https://github.com/graphprotocol/graph-tally/commit/7afcd9231f3a592418b93f0061411df0e474a725))
+
+
+### Code Refactoring
+
+* rename to grap tally ([4587f60](https://github.com/graphprotocol/graph-tally/commit/4587f60c69eecefccd717fa7bd38ddc0f140e788))
+
 ## [0.2.3](https://github.com/semiotic-ai/timeline-aggregation-protocol/compare/tap_eip712_message-v0.2.2...tap_eip712_message-v0.2.3) (2025-09-11)
 
 

@@ -10,6 +10,38 @@
 
 
 
+## [7.0.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_core-v6.0.3...graph_tally_core-v7.0.0) (2026-04-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename docs
+* rename public apis
+* rename to grap tally
+
+### Features
+
+* bump for release ([#287](https://github.com/graphprotocol/graph-tally/issues/287)) ([3ba2620](https://github.com/graphprotocol/graph-tally/commit/3ba262076754e504d45e421ac3b46f4a517a774f))
+* rename public apis ([fe5d840](https://github.com/graphprotocol/graph-tally/commit/fe5d840ce7267747d15366f2ca2d1e36f790cd5e))
+
+
+### Bug Fixes
+
+* Cargo.toml ([d004a72](https://github.com/graphprotocol/graph-tally/commit/d004a7262750fb75ee1165b6392119e5ba81d3c0))
+* remove README.md inclusion in core crate documentation ([b2b2140](https://github.com/graphprotocol/graph-tally/commit/b2b2140977db83f612b67704174ec08b43f875e1))
+* revert cargo version bumping ([7afcd92](https://github.com/graphprotocol/graph-tally/commit/7afcd9231f3a592418b93f0061411df0e474a725))
+* stray references to tap ([4b491cf](https://github.com/graphprotocol/graph-tally/commit/4b491cfb9418f5bd8620025f9aecd31f2e994019))
+
+
+### Documentation
+
+* rename docs ([c2edaf6](https://github.com/graphprotocol/graph-tally/commit/c2edaf672b65010f27366f185ae518dfc2a1b4b0))
+
+
+### Code Refactoring
+
+* rename to grap tally ([4587f60](https://github.com/graphprotocol/graph-tally/commit/4587f60c69eecefccd717fa7bd38ddc0f140e788))
+
 ## [6.0.3](https://github.com/semiotic-ai/timeline-aggregation-protocol/compare/tap_core-v6.0.2...tap_core-v6.0.3) (2026-01-26)
 
 
