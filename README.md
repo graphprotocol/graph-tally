@@ -18,7 +18,7 @@ simplifying the payment process.
 
 ## Documentation for Individual Components
 
-- [graph_tally_aggregator](crates/aggregator/README.md)
+- [graph_tally_aggregator](crates/bin/aggregator/README.md)
 
 ## Key Components
 

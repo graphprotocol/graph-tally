@@ -22,7 +22,7 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-latest
     outputs:
-      graph_tally_aggregator: ${{ steps.release-please.outputs['crates/aggregator--tag_name'] }}
+      graph_tally_aggregator: ${{ steps.release-please.outputs['crates/bin/aggregator--tag_name'] }}
     steps:
       - name: Release please
         id: release-please
