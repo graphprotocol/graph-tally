@@ -8,7 +8,7 @@ use thiserror::Error as ThisError;
 
 use crate::receipt::ReceiptError;
 
-/// Error type for the TAP protocol
+/// Error type for the Graph Tally protocol
 #[derive(ThisError, Debug)]
 pub enum Error {
     /// Error when trying to aggregate receipts and the result overflows

@@ -1,4 +1,4 @@
-//! Module containing error and warning codes used by the TAP aggregator JSON-RPC API.
+//! Module containing error and warning codes used by the Graph Tally aggregator JSON-RPC API.
 //!
 //! The JSON-RPC spec allocates error codes in the range `[-32000, -32099]` for application errors. We chose to use that
 //! range for both errors and warnings. We also chose error and warning codes that do not overlap, to reduce confusion.
@@ -6,7 +6,7 @@
 //! - Errors: `[-32000, -32049]`, where `-32000` is reserved for all errors without a specific code.
 //! - Warnings: `[-32050, -32099]`, where `-32050` is reserved for all warnings without a specific code.
 
-/// JSON-RPC error codes specific to the TAP aggregator.
+/// JSON-RPC error codes specific to the Graph Tally aggregator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JsonRpcErrorCode {
     /// -32000 -- Generic error.

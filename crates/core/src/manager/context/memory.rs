@@ -1,6 +1,6 @@
-//! In-memory context implementation for the TAP manager.
+//! In-memory context implementation for the Graph Tally manager.
 //!
-//! This module provides an in-memory implementation of the TAP manager context.
+//! This module provides an in-memory implementation of the Graph Tally manager context.
 //! It is useful for testing and development purposes.
 
 use std::{
