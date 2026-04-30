@@ -21,12 +21,12 @@ use tap_core::{
     manager::context::memory::{checks::get_full_list_of_checks, *},
     receipt::checks::{CheckList, StatefulTimestampCheck},
     signed_message::{Eip712SignedMessage, MessageId},
-    tap_eip712_domain, TapVersion,
+    tap_eip712_domain,
 };
 use tap_graph::{Receipt, SignedRav, SignedReceipt};
 use thegraph_core::alloy::{
     dyn_abi::Eip712Domain,
-    primitives::Address,
+    primitives::{Address, FixedBytes},
     signers::local::{coins_bip39::English, MnemonicBuilder, PrivateKeySigner},
 };
 use tokio::task::JoinHandle;
@@ -97,13 +97,25 @@ fn wrong_keys_sender() -> PrivateKeySigner {
         .unwrap()
 }
 
-// Allocation IDs are used to ensure receipts cannot be double-counted
+// Collection IDs are used for V2 receipts
 #[fixture]
-fn allocation_ids() -> Vec<Address> {
-    vec![
-        Address::from_str("0xabababababababababababababababababababab").unwrap(),
-        Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap(),
-    ]
+fn collection_ids() -> Vec<FixedBytes<32>> {
+    vec![FixedBytes::from([0xab; 32]), FixedBytes::from([0xde; 32])]
+}
+
+#[fixture]
+fn payer() -> Address {
+    Address::from_str("0xfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfb").unwrap()
+}
+
+#[fixture]
+fn data_service() -> Address {
+    Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap()
+}
+
+#[fixture]
+fn service_provider() -> Address {
+    Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap()
 }
 
 #[fixture]
@@ -119,12 +131,7 @@ fn sender_ids() -> Vec<Address> {
 // Domain separator is used to sign receipts/RAVs according to EIP-712
 #[fixture]
 fn domain_separator() -> Eip712Domain {
-    tap_eip712_domain(1, Address::from([0x11u8; 20]), TapVersion::V1)
-}
-
-#[fixture]
-fn domain_separator_v2() -> Eip712Domain {
-    tap_eip712_domain(1, Address::from([0x22u8; 20]), TapVersion::V2)
+    tap_eip712_domain(1, Address::from([0x11u8; 20]))
 }
 
 // Query price will typically be set by the Indexer. It's assumed to be part of the Indexer service.
@@ -167,7 +174,7 @@ struct ContextFixture {
 #[fixture]
 fn context(
     domain_separator: Eip712Domain,
-    allocation_ids: Vec<Address>,
+    collection_ids: Vec<FixedBytes<32>>,
     sender_ids: Vec<Address>,
     query_appraisals: QueryAppraisals,
 ) -> ContextFixture {
@@ -184,7 +191,7 @@ fn context(
     let checks = get_full_list_of_checks(
         domain_separator,
         sender_ids.iter().cloned().collect(),
-        Arc::new(RwLock::new(allocation_ids.iter().cloned().collect())),
+        Arc::new(RwLock::new(collection_ids.iter().cloned().collect())),
         query_appraisals,
     );
 
@@ -210,7 +217,10 @@ fn requests_1(
     keys_sender: PrivateKeySigner,
     query_price: &[u128],
     num_batches: u64,
-    allocation_ids: Vec<Address>,
+    collection_ids: Vec<FixedBytes<32>>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
     domain_separator: Eip712Domain,
 ) -> Vec<Eip712SignedMessage<Receipt>> {
     // Create your Receipt here
@@ -218,7 +228,10 @@ fn requests_1(
         query_price,
         num_batches,
         &keys_sender,
-        allocation_ids[0],
+        collection_ids[0],
+        payer,
+        data_service,
+        service_provider,
         &domain_separator,
     )
 }
@@ -228,7 +241,10 @@ fn requests_2(
     keys_sender: PrivateKeySigner,
     query_price: &[u128],
     num_batches: u64,
-    allocation_ids: Vec<Address>,
+    collection_ids: Vec<FixedBytes<32>>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
     domain_separator: Eip712Domain,
 ) -> Vec<Eip712SignedMessage<Receipt>> {
     // Create your Receipt here
@@ -236,7 +252,10 @@ fn requests_2(
         query_price,
         num_batches,
         &keys_sender,
-        allocation_ids[1],
+        collection_ids[1],
+        payer,
+        data_service,
+        service_provider,
         &domain_separator,
     )
 }
@@ -245,7 +264,10 @@ fn requests_2(
 fn repeated_timestamp_request(
     keys_sender: PrivateKeySigner,
     query_price: &[u128],
-    allocation_ids: Vec<Address>,
+    collection_ids: Vec<FixedBytes<32>>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
     domain_separator: Eip712Domain,
     num_batches: u64,
     receipt_threshold_1: u64,
@@ -255,7 +277,10 @@ fn repeated_timestamp_request(
         query_price,
         num_batches,
         &keys_sender,
-        allocation_ids[0],
+        collection_ids[0],
+        payer,
+        data_service,
+        service_provider,
         &domain_separator,
     );
 
@@ -265,7 +290,10 @@ fn repeated_timestamp_request(
         .timestamp_ns;
     let target_receipt = &requests[receipt_threshold_1 as usize].message;
     let repeat_receipt = Receipt {
-        allocation_id: target_receipt.allocation_id,
+        collection_id: target_receipt.collection_id,
+        payer: target_receipt.payer,
+        data_service: target_receipt.data_service,
+        service_provider: target_receipt.service_provider,
         timestamp_ns: repeat_timestamp,
         nonce: target_receipt.nonce,
         value: target_receipt.value,
@@ -281,7 +309,10 @@ fn repeated_timestamp_request(
 fn repeated_timestamp_incremented_by_one_request(
     keys_sender: PrivateKeySigner,
     query_price: &[u128],
-    allocation_ids: Vec<Address>,
+    collection_ids: Vec<FixedBytes<32>>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
     domain_separator: Eip712Domain,
     num_batches: u64,
     receipt_threshold_1: u64,
@@ -291,7 +322,10 @@ fn repeated_timestamp_incremented_by_one_request(
         query_price,
         num_batches,
         &keys_sender,
-        allocation_ids[0],
+        collection_ids[0],
+        payer,
+        data_service,
+        service_provider,
         &domain_separator,
     );
 
@@ -302,7 +336,10 @@ fn repeated_timestamp_incremented_by_one_request(
         + 1;
     let target_receipt = &requests[receipt_threshold_1 as usize].message;
     let repeat_receipt = Receipt {
-        allocation_id: target_receipt.allocation_id,
+        collection_id: target_receipt.collection_id,
+        payer: target_receipt.payer,
+        data_service: target_receipt.data_service,
+        service_provider: target_receipt.service_provider,
         timestamp_ns: repeat_timestamp,
         nonce: target_receipt.nonce,
         value: target_receipt.value,
@@ -320,7 +357,10 @@ fn wrong_requests(
     wrong_keys_sender: PrivateKeySigner,
     query_price: &[u128],
     num_batches: u64,
-    allocation_ids: Vec<Address>,
+    collection_ids: Vec<FixedBytes<32>>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
     domain_separator: Eip712Domain,
 ) -> Vec<Eip712SignedMessage<Receipt>> {
     // Create your Receipt here
@@ -329,7 +369,10 @@ fn wrong_requests(
         query_price,
         num_batches,
         &wrong_keys_sender,
-        allocation_ids[0],
+        collection_ids[0],
+        payer,
+        data_service,
+        service_provider,
         &domain_separator,
     )
 }
@@ -339,7 +382,6 @@ fn wrong_requests(
 async fn single_indexer_test_server(
     keys_sender: PrivateKeySigner,
     domain_separator: Eip712Domain,
-    domain_separator_v2: Eip712Domain,
     http_request_size_limit: u32,
     http_response_size_limit: u32,
     http_max_concurrent_connections: u32,
@@ -351,7 +393,6 @@ async fn single_indexer_test_server(
     let (sender_aggregator_handle, sender_aggregator_addr) = start_sender_aggregator(
         keys_sender,
         domain_separator.clone(),
-        domain_separator_v2.clone(),
         http_request_size_limit,
         http_response_size_limit,
         http_max_concurrent_connections,
@@ -380,7 +421,6 @@ async fn single_indexer_test_server(
 async fn two_indexers_test_servers(
     keys_sender: PrivateKeySigner,
     domain_separator: Eip712Domain,
-    domain_separator_v2: Eip712Domain,
     http_request_size_limit: u32,
     http_response_size_limit: u32,
     http_max_concurrent_connections: u32,
@@ -400,7 +440,6 @@ async fn two_indexers_test_servers(
     let (sender_aggregator_handle, sender_aggregator_addr) = start_sender_aggregator(
         keys_sender,
         domain_separator.clone(),
-        domain_separator_v2.clone(),
         http_request_size_limit,
         http_response_size_limit,
         http_max_concurrent_connections,
@@ -452,7 +491,6 @@ async fn two_indexers_test_servers(
 async fn single_indexer_wrong_sender_test_server(
     wrong_keys_sender: PrivateKeySigner,
     domain_separator: Eip712Domain,
-    domain_separator_v2: Eip712Domain,
     http_request_size_limit: u32,
     http_response_size_limit: u32,
     http_max_concurrent_connections: u32,
@@ -464,7 +502,6 @@ async fn single_indexer_wrong_sender_test_server(
     let (sender_aggregator_handle, sender_aggregator_addr) = start_sender_aggregator(
         wrong_keys_sender,
         domain_separator.clone(),
-        domain_separator_v2.clone(),
         http_request_size_limit,
         http_response_size_limit,
         http_max_concurrent_connections,
@@ -701,7 +738,6 @@ async fn test_tap_manager_rav_timestamp_cuttoff(
 async fn test_tap_aggregator_rav_timestamp_cuttoff(
     keys_sender: PrivateKeySigner,
     domain_separator: Eip712Domain,
-    domain_separator_v2: Eip712Domain,
     http_request_size_limit: u32,
     http_response_size_limit: u32,
     http_max_concurrent_connections: u32,
@@ -713,7 +749,6 @@ async fn test_tap_aggregator_rav_timestamp_cuttoff(
     let (sender_handle, sender_addr) = start_sender_aggregator(
         keys_sender,
         domain_separator,
-        domain_separator_v2,
         http_request_size_limit,
         http_response_size_limit,
         http_max_concurrent_connections,
@@ -781,7 +816,10 @@ fn generate_requests(
     query_price: &[u128],
     num_batches: u64,
     sender_key: &PrivateKeySigner,
-    allocation_id: Address,
+    collection_id: FixedBytes<32>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
     domain_separator: &Eip712Domain,
 ) -> Vec<Eip712SignedMessage<Receipt>> {
     let mut requests: Vec<Eip712SignedMessage<Receipt>> = Vec::new();
@@ -791,7 +829,8 @@ fn generate_requests(
             requests.push(
                 Eip712SignedMessage::new(
                     domain_separator,
-                    Receipt::new(allocation_id, *value).unwrap(),
+                    Receipt::new(collection_id, payer, data_service, service_provider, *value)
+                        .unwrap(),
                     sender_key,
                 )
                 .unwrap(),
@@ -838,7 +877,6 @@ async fn start_indexer_server(
 async fn start_sender_aggregator(
     keys: PrivateKeySigner,
     domain_separator: Eip712Domain,
-    domain_separator_v2: Eip712Domain,
     http_request_size_limit: u32,
     http_response_size_limit: u32,
     http_max_concurrent_connections: u32,
@@ -855,7 +893,6 @@ async fn start_sender_aggregator(
         keys,
         accepted_addresses,
         domain_separator,
-        domain_separator_v2,
         http_request_size_limit,
         http_response_size_limit,
         http_max_concurrent_connections,

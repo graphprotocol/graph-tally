@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::Parser;
 use log::{debug, info};
 use tap_aggregator::{metrics, server};
-use tap_core::{tap_eip712_domain, TapVersion};
+use tap_core::tap_eip712_domain;
 use thegraph_core::alloy::{
     dyn_abi::Eip712Domain, primitives::Address, signers::local::PrivateKeySigner,
 };
@@ -62,15 +62,11 @@ struct Args {
     #[arg(long, env = "TAP_DOMAIN_CHAIN_ID")]
     domain_chain_id: Option<String>,
 
-    /// [TAP v1] Domain verifying contract to be used for the EIP-712 domain separator.
+    /// Domain verifying contract to be used for the EIP-712 domain separator.
     #[arg(long, env = "TAP_DOMAIN_VERIFYING_CONTRACT")]
     domain_verifying_contract: Option<Address>,
 
-    /// [TAP v2] Domain verifying contract to be used for the EIP-712 domain separator.
-    #[arg(long, env = "TAP_DOMAIN_VERIFYING_CONTRACT_V2")]
-    domain_verifying_contract_v2: Option<Address>,
-
-    /// [Shared] Domain salt to be used for the EIP-712 domain separator.
+    /// [Unused] Domain salt to be used for the EIP-712 domain separator.
     #[arg(long, env = "TAP_DOMAIN_SALT")]
     domain_salt: Option<String>,
 
@@ -91,10 +87,6 @@ impl std::fmt::Debug for Args {
             .field("metrics_port", &self.metrics_port)
             .field("domain_chain_id", &self.domain_chain_id)
             .field("domain_verifying_contract", &self.domain_verifying_contract)
-            .field(
-                "domain_verifying_contract_v2",
-                &self.domain_verifying_contract_v2,
-            )
             .field("domain_salt", &self.domain_salt)
             .field("kafka_config", &self.kafka_config)
             .finish()
@@ -123,8 +115,7 @@ async fn main() -> Result<()> {
     info!("Wallet address: {:#40x}", wallet.address());
 
     // Create the EIP-712 domain separator.
-    let domain_separator = create_eip712_domain(&args, TapVersion::V1)?;
-    let domain_separator_v2 = create_eip712_domain(&args, TapVersion::V2)?;
+    let domain_separator = create_eip712_domain(&args)?;
 
     // Create HashSet of *all* allowed signers
     let mut accepted_addresses: HashSet<Address> = std::collections::HashSet::new();
@@ -151,7 +142,6 @@ async fn main() -> Result<()> {
         wallet,
         accepted_addresses,
         domain_separator,
-        domain_separator_v2,
         args.max_request_body_size,
         args.max_response_body_size,
         args.max_connections,
@@ -168,11 +158,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Creates the TAP EIP-712 domain separator based on the provided arguments and TAP version
-fn create_eip712_domain(args: &Args, version: TapVersion) -> Result<Eip712Domain> {
-    // Transform the args into the types expected by Eip712Domain::new().
-    // Transform optional strings into optional Cow<str>.
-    // Transform optional strings into optional U256.
+/// Creates the TAP EIP-712 domain separator based on the provided arguments
+fn create_eip712_domain(args: &Args) -> Result<Eip712Domain> {
     if args.domain_chain_id.is_some() {
         debug!("Parsing domain chain ID...");
     }
@@ -186,16 +173,11 @@ fn create_eip712_domain(args: &Args, version: TapVersion) -> Result<Eip712Domain
         debug!("Parsing domain salt...");
     }
 
-    // Transform optional strings into optional Address.
-    let verifying_contract: Option<Address> = match version {
-        TapVersion::V1 => args.domain_verifying_contract,
-        TapVersion::V2 => args.domain_verifying_contract_v2,
-    };
+    let verifying_contract = args.domain_verifying_contract;
 
     // Create the EIP-712 domain separator.
     Ok(tap_eip712_domain(
         chain_id.unwrap_or(1),
         verifying_contract.unwrap_or_default(),
-        version,
     ))
 }

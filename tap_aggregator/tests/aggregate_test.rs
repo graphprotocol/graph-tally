@@ -2,19 +2,21 @@ use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use jsonrpsee::{core::client::ClientT, http_client::HttpClientBuilder, rpc_params};
 use tap_aggregator::{
-    grpc::v1::{tap_aggregator_client::TapAggregatorClient, RavRequest},
+    grpc::v2::{tap_aggregator_client::TapAggregatorClient, RavRequest},
     jsonrpsee_helpers::JsonRpcResponse,
     server,
 };
-use tap_core::{signed_message::Eip712SignedMessage, tap_eip712_domain, TapVersion};
+use tap_core::{signed_message::Eip712SignedMessage, tap_eip712_domain};
 use tap_graph::{Receipt, ReceiptAggregateVoucher};
-use thegraph_core::alloy::{primitives::Address, signers::local::PrivateKeySigner};
+use thegraph_core::alloy::{
+    primitives::{Address, FixedBytes},
+    signers::local::PrivateKeySigner,
+};
 use tonic::codec::CompressionEncoding;
 
 #[tokio::test]
 async fn aggregation_test() {
-    let domain_separator = tap_eip712_domain(1, Address::ZERO, TapVersion::V1);
-    let domain_separator_v2 = tap_eip712_domain(1, Address::ZERO, TapVersion::V2);
+    let domain_separator = tap_eip712_domain(1, Address::ZERO);
 
     let wallet = PrivateKeySigner::random();
 
@@ -29,7 +31,6 @@ async fn aggregation_test() {
         wallet.clone(),
         accepted_addresses,
         domain_separator.clone(),
-        domain_separator_v2.clone(),
         max_request_body_size,
         max_response_body_size,
         max_concurrent_connections,
@@ -46,7 +47,10 @@ async fn aggregation_test() {
         .unwrap()
         .send_compressed(CompressionEncoding::Zstd);
 
-    let allocation_id = Address::from_str("0xabababababababababababababababababababab").unwrap();
+    let collection_id = FixedBytes::from([0xab; 32]);
+    let payer = Address::from_str("0xabababababababababababababababababababab").unwrap();
+    let data_service = Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap();
+    let service_provider = Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap();
 
     // Create receipts
     let mut receipts = Vec::new();
@@ -54,7 +58,7 @@ async fn aggregation_test() {
         receipts.push(
             Eip712SignedMessage::new(
                 &domain_separator,
-                Receipt::new(allocation_id, value).unwrap(),
+                Receipt::new(collection_id, payer, data_service, service_provider, value).unwrap(),
                 &wallet,
             )
             .unwrap(),
@@ -73,7 +77,7 @@ async fn aggregation_test() {
         .request(
             "aggregate_receipts",
             rpc_params!(
-                "0.0", // TODO: Set the version in a smarter place.
+                "0.0", // API version
                 receipts,
                 previous_rav
             ),

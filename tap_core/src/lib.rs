@@ -31,45 +31,19 @@ fn get_current_timestamp_u64_ns() -> Result<u64> {
 ///
 /// This is the current domain separator that is used for the [EIP712](https://eips.ethereum.org/EIPS/eip-712) signature scheme.
 ///
-///
 /// It's used to validate the signature of the `ReceiptAggregateVoucher` and `Receipt` structs.
 ///
 /// You can take a look on deployed [GraphTallyCollector](https://github.com/graphprotocol/contracts/blob/main/packages/horizon/contracts/payments/collectors/GraphTallyCollector.sol)
 /// contract [here](https://github.com/graphprotocol/contracts/blob/main/packages/horizon/addresses.json)
 ///
-/// TAP protocol version for EIP-712 domain separator
-#[derive(Debug, Clone, Copy)]
-pub enum TapVersion {
-    V1,
-    V2,
-}
-
-impl TapVersion {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            TapVersion::V1 => "1",
-            TapVersion::V2 => "2",
-        }
-    }
-}
-
 /// The domain separator is defined as:
-/// - `name`: "TAP" for V1, "GraphTallyCollector" for V2 - This could be a fn argument but we don't want to change the function signature.
-/// - `version`: always set to "1", what changes is the domain name.
+/// - `name`: "GraphTallyCollector"
+/// - `version`: "1"
 /// - `chain_id`: The chain ID of the chain where the domain separator is deployed.
 /// - `verifying_contract`: The address of the contract that is verifying the signature.
-pub fn tap_eip712_domain(
-    chain_id: u64,
-    verifying_contract_address: Address,
-    version: TapVersion,
-) -> Eip712Domain {
-    let name = match version {
-        TapVersion::V1 => "TAP",
-        TapVersion::V2 => "GraphTallyCollector",
-    };
-
+pub fn tap_eip712_domain(chain_id: u64, verifying_contract_address: Address) -> Eip712Domain {
     eip712_domain! {
-        name: name,
+        name: "GraphTallyCollector",
         version: "1",
         chain_id: chain_id,
         verifying_contract: verifying_contract_address,
@@ -83,10 +57,12 @@ mod tap_tests {
     use rstest::*;
     use tap_graph::{Receipt, ReceiptAggregateVoucher};
     use thegraph_core::alloy::{
-        dyn_abi::Eip712Domain, primitives::Address, signers::local::PrivateKeySigner,
+        dyn_abi::Eip712Domain,
+        primitives::{Address, FixedBytes},
+        signers::local::PrivateKeySigner,
     };
 
-    use crate::{signed_message::Eip712SignedMessage, tap_eip712_domain, TapVersion};
+    use crate::{signed_message::Eip712SignedMessage, tap_eip712_domain};
 
     #[fixture]
     fn keys() -> (PrivateKeySigner, Address) {
@@ -97,18 +73,28 @@ mod tap_tests {
     }
 
     #[fixture]
-    fn allocation_ids() -> Vec<Address> {
-        vec![
-            Address::from_str("0xabababababababababababababababababababab").unwrap(),
-            Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap(),
-            Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap(),
-            Address::from_str("0x1234567890abcdef1234567890abcdef12345678").unwrap(),
-        ]
+    fn collection_id() -> FixedBytes<32> {
+        FixedBytes::from([0xab; 32])
+    }
+
+    #[fixture]
+    fn payer() -> Address {
+        Address::from_str("0xabababababababababababababababababababab").unwrap()
+    }
+
+    #[fixture]
+    fn data_service() -> Address {
+        Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap()
+    }
+
+    #[fixture]
+    fn service_provider() -> Address {
+        Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap()
     }
 
     #[fixture]
     fn domain_separator() -> Eip712Domain {
-        tap_eip712_domain(1, Address::from([0x11u8; 20]), TapVersion::V1)
+        tap_eip712_domain(1, Address::from([0x11u8; 20]))
     }
 
     #[rstest]
@@ -117,7 +103,10 @@ mod tap_tests {
     #[test]
     fn signed_rav_is_valid_with_no_previous_rav(
         keys: (PrivateKeySigner, Address),
-        allocation_ids: Vec<Address>,
+        collection_id: FixedBytes<32>,
+        payer: Address,
+        data_service: Address,
+        service_provider: Address,
         domain_separator: Eip712Domain,
         #[case] values: Vec<u128>,
     ) {
@@ -127,7 +116,8 @@ mod tap_tests {
             receipts.push(
                 Eip712SignedMessage::new(
                     &domain_separator,
-                    Receipt::new(allocation_ids[0], value).unwrap(),
+                    Receipt::new(collection_id, payer, data_service, service_provider, value)
+                        .unwrap(),
                     &keys.0,
                 )
                 .unwrap(),
@@ -136,8 +126,15 @@ mod tap_tests {
 
         // Skipping receipts validation in this test, aggregate_receipts assumes receipts are valid.
 
-        let rav = ReceiptAggregateVoucher::aggregate_receipts(allocation_ids[0], &receipts, None)
-            .unwrap();
+        let rav = ReceiptAggregateVoucher::aggregate_receipts(
+            collection_id,
+            payer,
+            data_service,
+            service_provider,
+            &receipts,
+            None,
+        )
+        .unwrap();
         let signed_rav = Eip712SignedMessage::new(&domain_separator, rav, &keys.0).unwrap();
         assert!(signed_rav.recover_signer(&domain_separator).unwrap() == keys.1);
     }
@@ -148,7 +145,10 @@ mod tap_tests {
     #[test]
     fn signed_rav_is_valid_with_previous_rav(
         keys: (PrivateKeySigner, Address),
-        allocation_ids: Vec<Address>,
+        collection_id: FixedBytes<32>,
+        payer: Address,
+        data_service: Address,
+        service_provider: Address,
         domain_separator: Eip712Domain,
         #[case] values: Vec<u128>,
     ) {
@@ -158,7 +158,8 @@ mod tap_tests {
             receipts.push(
                 Eip712SignedMessage::new(
                     &domain_separator,
-                    Receipt::new(allocation_ids[0], value).unwrap(),
+                    Receipt::new(collection_id, payer, data_service, service_provider, value)
+                        .unwrap(),
                     &keys.0,
                 )
                 .unwrap(),
@@ -167,7 +168,10 @@ mod tap_tests {
 
         // Create previous RAV from first half of receipts
         let prev_rav = ReceiptAggregateVoucher::aggregate_receipts(
-            allocation_ids[0],
+            collection_id,
+            payer,
+            data_service,
+            service_provider,
             &receipts[0..receipts.len() / 2],
             None,
         )
@@ -177,7 +181,10 @@ mod tap_tests {
 
         // Create new RAV from last half of receipts and prev_rav
         let rav = ReceiptAggregateVoucher::aggregate_receipts(
-            allocation_ids[0],
+            collection_id,
+            payer,
+            data_service,
+            service_provider,
             &receipts[receipts.len() / 2..receipts.len()],
             Some(signed_prev_rav),
         )

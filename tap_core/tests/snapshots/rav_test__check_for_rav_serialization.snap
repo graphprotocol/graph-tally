@@ -1,147 +1,176 @@
 ---
 source: tap_core/tests/rav_test.rs
 expression: receipts
-snapshot_kind: text
 ---
 [
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 50,
       "nonce": 50,
       "value": 50
     },
     "signature": {
-      "r": "0x5257bab234e33525cd999db4defc805c2d3b4e51cde3697f43e37ce39473720f",
-      "s": "0x6c3af14c3d400dfd047fd2da90eb9e8cee863e77cc52742ebcbf080b8d6ec2",
-      "yParity": "0x1",
-      "v": "0x1"
+      "r": "0xc23da011db5a5b9d35a324dee7e794946758b144407b4d8b6a357acfc3dcdaee",
+      "s": "0x7b11193ab8bd0f31d47f7447cb5edf15537ae763ba04a3d34ae61a78a9739868",
+      "yParity": "0x0",
+      "v": "0x0"
     }
   },
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 51,
       "nonce": 51,
       "value": 51
     },
     "signature": {
-      "r": "0x1596dd0d380ede7aa5dec5ed09ea7d1fa8e4bc8dfdb43a4e965bb4f16906e321",
-      "s": "0x788b69625a031fbd2e769928b63505387df16e7c51f19ff67c782bfec101a387",
-      "yParity": "0x0",
-      "v": "0x0"
+      "r": "0x40512211d2c63a96c40e3219b43c751a06bfa08f29b149c5d3167738623c3868",
+      "s": "0x3a065c929c835bb474d0f3b2281ecb7f036b0d23560788b67c66ad365fe3f0f2",
+      "yParity": "0x1",
+      "v": "0x1"
     }
   },
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 52,
       "nonce": 52,
       "value": 52
     },
     "signature": {
-      "r": "0xb3b8e2c1249fc14183024e28b14f7749ef852c898906c2442f380a26bf07a625",
-      "s": "0x6925e7dce01d539a658d552e43cfd92d9d204d6997604f8f613977251b964db3",
-      "yParity": "0x1",
-      "v": "0x1"
+      "r": "0x4fb41ea14b06d1d123856a5da35f7fc564b58d93a608f725326c0ab55c8c1fbe",
+      "s": "0x6723ab05ebbf95edb7574557406a55979b7afd8394c3f263fae7e2fafc66c183",
+      "yParity": "0x0",
+      "v": "0x0"
     }
   },
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 53,
       "nonce": 53,
       "value": 53
     },
     "signature": {
-      "r": "0x3b4d08db319497c2cc0d515d25057e28ce44b194a23e84b9d35682f97027c7e3",
-      "s": "0x232e02eb4b52d302d620867a4c10829e5a307404ea1bcbbd2ee33e8422a18a16",
-      "yParity": "0x1",
-      "v": "0x1"
+      "r": "0xe69f76ca12929f3b5710d384ab0f01362b5efe643e6b96848ad390ba91402edf",
+      "s": "0x7fbca24cb6d63a4ae22ba0b111b2055f6711141ecf2e51464609c7de3b3f1e92",
+      "yParity": "0x0",
+      "v": "0x0"
     }
   },
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 54,
       "nonce": 54,
       "value": 54
     },
     "signature": {
-      "r": "0x619d84f659ea3941cdb0656100b2ea8a3d2f5658dbd67f796ebfb8840156530b",
-      "s": "0x163b236f88207b89452255da8ce196997d8f2f0880081659c780f2093797f75e",
+      "r": "0xad13f399d173eb3af8a42454dba16b952d664c4348b00d29e8b12056307c9cbc",
+      "s": "0x716ed2429d1f8af9ee3100bf2e7efe4899887f9702dbb9468f60ef60ff0592e6",
       "yParity": "0x1",
       "v": "0x1"
     }
   },
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 55,
       "nonce": 55,
       "value": 55
     },
     "signature": {
-      "r": "0x48e1e0e31eaf40eabbcbc3c6d125b7656c0796d51188f89d27194e22f2c5d6bb",
-      "s": "0xd26efc0ae8cc3646993a20b5aabac1125ecb149ad91d733c702ac9f03222b66",
-      "yParity": "0x1",
-      "v": "0x1"
+      "r": "0x44e9cd755c0bbd7416e1967bc35846500d5afcd4d070472003cd97b45c2d43",
+      "s": "0x4d85489dd104f506413109b66b9a0120e37c7775fc71be2f93a00b86a14533e4",
+      "yParity": "0x0",
+      "v": "0x0"
     }
   },
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 56,
       "nonce": 56,
       "value": 56
     },
     "signature": {
-      "r": "0xc3adb8be5db130f563d3a18fc9e742fca84f69a903413e04dc567b9c3aca8626",
-      "s": "0x564dd73bdd33897c7a085e4eb1bc0ce002b1d65c6006781ab54cd670846fe358",
-      "yParity": "0x0",
-      "v": "0x0"
+      "r": "0xfe528704d3fbfca05f343f87af1d0f860714f4d282494bf264bb0359adab84de",
+      "s": "0x6f6d4d80b6366211adbd48b80d665b1e724feaca37324e04127c13e4815cc39a",
+      "yParity": "0x1",
+      "v": "0x1"
     }
   },
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 57,
       "nonce": 57,
       "value": 57
     },
     "signature": {
-      "r": "0xa0fe51e1b7253daed14f99c9320d0a539ef18b6ead6552947e5c93dde6f40dea",
-      "s": "0x4277d66d3a8c9f67cddc8d96a71ef8437e47e34a5b5789d7843eb691c3b9864",
+      "r": "0x4e5b6f63cd871d2a31701cbf3e351ec814493c9c68b7b61e330ad9d16a1b9f78",
+      "s": "0x73fa48da496c38189e4b865a354b7199e8f4bde4f942c4b71bd9d9b8523b88f7",
       "yParity": "0x0",
       "v": "0x0"
     }
   },
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 58,
       "nonce": 58,
       "value": 58
     },
     "signature": {
-      "r": "0x26f1657e4b8759867820be12c25e982e15ff9d70aa99fe1fd2587cbb644829de",
-      "s": "0x5cabbd965f93e544b07e5956c2831148dbf7960b4e2edadfa6ecbf1209dacda4",
-      "yParity": "0x0",
-      "v": "0x0"
+      "r": "0x5cc672c3be1b83461b053750f1c9062656e6204e8ccdca74cc5791782e36c0ca",
+      "s": "0x456220b71c8011b9ea7fbf5951726af2dbd25dab87d03850c9c30b27d1117037",
+      "yParity": "0x1",
+      "v": "0x1"
     }
   },
   {
     "message": {
-      "allocation_id": "0xabababababababababababababababababababab",
+      "collection_id": "0xabababababababababababababababababababababababababababababababab",
+      "payer": "0xabababababababababababababababababababab",
+      "data_service": "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+      "service_provider": "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
       "timestamp_ns": 59,
       "nonce": 59,
       "value": 59
     },
     "signature": {
-      "r": "0x90ce08049b9ce9fa38077ebeed0e24558442d8ae001aeff6b9f4b06f4f553c69",
-      "s": "0x7a873491448ae696555f9d1314b4e78a7cc98a19a6b0c26aad562053dc26a202",
-      "yParity": "0x1",
-      "v": "0x1"
+      "r": "0x86024ce796db0a6c24feccae54217933002e4220a76f1911f2896e94f5377422",
+      "s": "0x29c1931ad9b688519400540e302ed1bb080f5b8ebdec4628bb82f33581ff6798",
+      "yParity": "0x0",
+      "v": "0x0"
     }
   }
 ]

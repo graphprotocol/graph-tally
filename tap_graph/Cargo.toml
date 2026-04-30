@@ -17,8 +17,3 @@ thegraph-core.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
-
-
-[features]
-default = []
-v2 = []
