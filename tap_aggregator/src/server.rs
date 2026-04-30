@@ -151,7 +151,7 @@ fn check_api_version_deprecation(api_version: &TapRpcApiVersion) -> Option<JsonR
             JsonRpcWarningCode::DeprecatedVersion as i32,
             format!(
                 "The API version {api_version} will be deprecated. \
-                Please check https://github.com/semiotic-ai/timeline_aggregation_protocol for more information."
+                Please check https://github.com/graphprotocol/timeline_aggregation_protocol for more information."
             ),
             Some(tap_rpc_api_versions_info()),
         ))

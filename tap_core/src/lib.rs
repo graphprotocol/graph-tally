@@ -34,8 +34,8 @@ fn get_current_timestamp_u64_ns() -> Result<u64> {
 ///
 /// It's used to validate the signature of the `ReceiptAggregateVoucher` and `Receipt` structs.
 ///
-/// You can take a look on deployed [TAPVerfiers](https://github.com/semiotic-ai/timeline-aggregation-protocol-contracts/blob/4dc87fc616680c924b99dbaf285bdd449c777261/src/TAPVerifier.sol)
-/// contracts [here](https://github.com/semiotic-ai/timeline-aggregation-protocol-contracts/blob/4dc87fc616680c924b99dbaf285bdd449c777261/addresses.json)
+/// You can take a look on deployed [GraphTallyCollector](https://github.com/graphprotocol/contracts/blob/main/packages/horizon/contracts/payments/collectors/GraphTallyCollector.sol)
+/// contract [here](https://github.com/graphprotocol/contracts/blob/main/packages/horizon/addresses.json)
 ///
 /// TAP protocol version for EIP-712 domain separator
 #[derive(Debug, Clone, Copy)]

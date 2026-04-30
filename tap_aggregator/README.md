@@ -48,9 +48,7 @@ Options:
           Print version
 ```
 
-Please refer to
-[timeline-aggregation-protocol-contracts](https://github.com/semiotic-ai/timeline-aggregation-protocol-contracts) for
-more information about Receipt Aggregate Voucher signing keys.
+Please refer to [GraphTallyCollector](https://github.com/graphprotocol/contracts/blob/main/packages/horizon/contracts/payments/collectors/GraphTallyCollector.sol) for more information about Receipt Aggregate Voucher signing keys.
 
 ## Operational recommendations
 
@@ -140,7 +138,7 @@ We define these warning codes:
                           "0.1"
                       ]
                   },
-                  "message": "The API version 0.0 will be deprecated. Please check https://github.com/semiotic-ai/timeline_aggregation_protocol for more information."
+                  "message": "The API version 0.0 will be deprecated. Please check https://github.com/graphprotocol/timeline_aggregation_protocol for more information."
               }
           ]
       }
