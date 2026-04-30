@@ -182,17 +182,18 @@ async fn multi_receipt_adapter_test(
 #[case(vec![1, 1, 1, 1, 2, 3], 3, vec![])]
 #[test]
 fn safe_truncate_receipts_test(
-    domain_separator: Eip712Domain,
-    collection_id: FixedBytes<32>,
-    payer: Address,
-    data_service: Address,
-    service_provider: Address,
     #[case] input: Vec<u64>,
     #[case] limit: u64,
     #[case] expected: Vec<u64>,
 ) {
     use rand::{rng, seq::SliceRandom};
+    use std::str::FromStr;
 
+    let domain_separator = tap_eip712_domain(1, Address::from([0x11u8; 20]));
+    let collection_id = FixedBytes::from([0xab; 32]);
+    let payer = Address::from_str("0xabababababababababababababababababababab").unwrap();
+    let data_service = Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap();
+    let service_provider = Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap();
     let wallet = PrivateKeySigner::random();
 
     // Vec of (id, receipt)

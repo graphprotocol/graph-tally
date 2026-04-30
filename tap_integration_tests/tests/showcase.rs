@@ -613,8 +613,7 @@ async fn test_manager_wrong_aggregator_keys(
     let indexer_1_address = "http://".to_string() + &socket_addr.to_string();
     let client_1 = HttpClientBuilder::default().build(indexer_1_address)?;
 
-    let mut counter = 1;
-    for receipt_1 in requests_1 {
+    for (counter, receipt_1) in (1..).zip(requests_1) {
         let result: Result<(), jsonrpsee::core::ClientError> =
             client_1.request("request", (receipt_1,)).await;
         // The rav request is being made with messages that have been signed with a key that differs from the sender aggregator's.
@@ -634,7 +633,6 @@ async fn test_manager_wrong_aggregator_keys(
                 result.unwrap_err()
             );
         }
-        counter += 1;
     }
 
     Ok(())
@@ -698,8 +696,7 @@ async fn test_tap_manager_rav_timestamp_cuttoff(
     let client_1 = HttpClientBuilder::default().build(indexer_1_address)?;
     let client_2 = HttpClientBuilder::default().build(indexer_2_address)?;
 
-    let mut counter = 1;
-    for receipt_1 in repeated_timestamp_request {
+    for (counter, receipt_1) in (1..).zip(repeated_timestamp_request) {
         let result: Result<(), jsonrpsee::core::ClientError> =
             client_1.request("request", (receipt_1,)).await;
 
@@ -716,7 +713,6 @@ async fn test_tap_manager_rav_timestamp_cuttoff(
                 result.unwrap_err()
             );
         }
-        counter += 1;
     }
 
     server_handle_1.stop()?;
