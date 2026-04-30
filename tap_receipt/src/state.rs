@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! # Receipt State
 //!
 //! These are the implementation of the typestate pattern for tracking the

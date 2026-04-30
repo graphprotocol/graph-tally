@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 // These tests simulate a Sender sending query requests and receipts to one or two Indexers.
 // The tests use a mock Indexer server running a tap_manager instance and a tap_aggregator to handle RAV requests.
 // An Indexer checks and stores receipts. After receiving a specific number of receipts, the Indexer sends a RAV request to the aggregator.

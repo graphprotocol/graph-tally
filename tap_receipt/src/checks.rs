@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! # Receipt Checks
 //!
 //! Checks are implemented by the lib user to validate receipts before they are stored.

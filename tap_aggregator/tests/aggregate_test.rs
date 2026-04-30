@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use jsonrpsee::{core::client::ClientT, http_client::HttpClientBuilder, rpc_params};

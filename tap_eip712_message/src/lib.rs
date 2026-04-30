@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! # EIP712 signed message
 //!
 //! This crate contains the `EIP712SignedMessage` struct which is used to sign and verify messages

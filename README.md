@@ -1,12 +1,12 @@
 # Timeline Aggregation Protocol (TAP)
 
-| Crate                  | Version Badge                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **tap_aggregator**     | [![Crates.io](https://img.shields.io/crates/v/tap_aggregator.svg)](https://crates.io/crates/tap_aggregator)        |
-| **tap_core**           | [![Crates.io](https://img.shields.io/crates/v/tap_core.svg)](https://crates.io/crates/tap_core)                    |
-| **tap_eip712_message** | [![Crates.io](https://img.shields.io/crates/v/tap_eip712_message.svg)](https://crates.io/crates/tap_eip712_message)|
-| **tap_graph**          | [![Crates.io](https://img.shields.io/crates/v/tap_graph.svg)](https://crates.io/crates/tap_graph)                  |
-| **tap_receipt**        | [![Crates.io](https://img.shields.io/crates/v/tap_receipt.svg)](https://crates.io/crates/tap_receipt)              |
+| Crate                  | Latest Version                                                                                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **tap_aggregator**     | [![GHCR](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=tap_aggregator-*&label=ghcr.io)](https://github.com/graphprotocol/timeline-aggregation-protocol/pkgs/container/tap_aggregator) |
+| **tap_core**           | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=tap_core-*)](https://github.com/graphprotocol/timeline-aggregation-protocol/releases)        |
+| **tap_eip712_message** | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=tap_eip712_message-*)](https://github.com/graphprotocol/timeline-aggregation-protocol/releases) |
+| **tap_graph**          | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=tap_graph-*)](https://github.com/graphprotocol/timeline-aggregation-protocol/releases)       |
+| **tap_receipt**        | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=tap_receipt-*)](https://github.com/graphprotocol/timeline-aggregation-protocol/releases)     |
 
 ## Overview
 
@@ -81,4 +81,4 @@ system being off-chain.
 
 Contributions are welcome! Please submit a pull request or open an issue to 
 discuss potential changes.
-Also, make sure to follow the [Contributing Guide](https://github.com/semiotic-ai/timeline-aggregation-protocol/blob/main/CONTRIBUTING.md).
+Also, make sure to follow the [Contributing Guide](https://github.com/graphprotocol/timeline-aggregation-protocol/blob/main/CONTRIBUTING.md).

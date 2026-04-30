@@ -12,9 +12,9 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.91"
 license = "Apache-2.0"
-repository = "https://github.com/semiotic-ai/timeline-aggregation-protocol"
+repository = "https://github.com/graphprotocol/timeline-aggregation-protocol"
 
 [workspace.dependencies]
 anyhow = { version = "1.0.98" }

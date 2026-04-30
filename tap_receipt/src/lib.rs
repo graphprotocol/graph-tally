@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! # Receipts states and checks
 //!
 //! Receipts are used as single transaction promise of payment. A payment sender

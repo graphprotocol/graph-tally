@@ -1,6 +1,3 @@
-// Copyright 2023-, Semiotic AI, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 //! Aggregation of Receipts
 
 use tap_eip712_message::Eip712SignedMessage;
