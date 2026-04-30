@@ -1,0 +1,28 @@
+[package]
+name = "graph_tally_core"
+version = "6.0.3"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core Graph Tally library: a fast, efficient and trustless unidirectional micro-payments system."
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+rand.workspace = true
+graph_tally_eip712_message.workspace = true
+graph_tally_graph = { workspace = true, optional = true }
+graph_tally_receipt.workspace = true
+thegraph-core.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+rstest.workspace = true
+serde_json.workspace = true
+
+[features]
+default = ["in_memory"]
+in_memory = ["dep:graph_tally_graph"]

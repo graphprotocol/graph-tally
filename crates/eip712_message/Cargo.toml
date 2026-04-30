@@ -1,0 +1,15 @@
+[package]
+name = "graph_tally_eip712_message"
+version = "0.2.3"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "EIP712 signed messages used by Graph Tally"
+
+[dependencies]
+serde.workspace = true
+thegraph-core.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]

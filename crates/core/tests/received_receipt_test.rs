@@ -1,0 +1,272 @@
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    sync::{Arc, RwLock},
+};
+
+use graph_tally_core::{
+    manager::context::memory::{checks::get_full_list_of_checks, EscrowStorage, QueryAppraisals},
+    receipt::{
+        checks::{ReceiptCheck, StatefulTimestampCheck},
+        Context, ReceiptWithState,
+    },
+    signed_message::Eip712SignedMessage,
+    tap_eip712_domain,
+};
+use graph_tally_graph::{Receipt, SignedReceipt};
+use rstest::*;
+use thegraph_core::alloy::{
+    dyn_abi::Eip712Domain,
+    primitives::{Address, FixedBytes},
+    signers::local::PrivateKeySigner,
+};
+
+#[fixture]
+fn signer() -> PrivateKeySigner {
+    PrivateKeySigner::random()
+}
+
+#[fixture]
+fn collection_ids() -> Vec<FixedBytes<32>> {
+    vec![
+        FixedBytes::from([0xab; 32]),
+        FixedBytes::from([0xcd; 32]),
+        FixedBytes::from([0xef; 32]),
+        FixedBytes::from([0x12; 32]),
+    ]
+}
+
+#[fixture]
+fn payer() -> Address {
+    Address::from_str("0xabababababababababababababababababababab").unwrap()
+}
+
+#[fixture]
+fn data_service() -> Address {
+    Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap()
+}
+
+#[fixture]
+fn service_provider() -> Address {
+    Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap()
+}
+
+#[fixture]
+fn sender_ids(signer: PrivateKeySigner) -> (PrivateKeySigner, Vec<Address>) {
+    let address = signer.address();
+    (
+        signer,
+        vec![
+            Address::from_str("0xfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfbfb").unwrap(),
+            Address::from_str("0xfafafafafafafafafafafafafafafafafafafafa").unwrap(),
+            Address::from_str("0xadadadadadadadadadadadadadadadadadadadad").unwrap(),
+            address,
+        ],
+    )
+}
+
+#[fixture]
+fn domain_separator() -> Eip712Domain {
+    tap_eip712_domain(1, Address::from([0x11u8; 20]))
+}
+
+struct ContextFixture {
+    escrow_storage: EscrowStorage,
+    query_appraisals: QueryAppraisals,
+    checks: Vec<ReceiptCheck<SignedReceipt>>,
+    signer: PrivateKeySigner,
+}
+
+#[fixture]
+fn context(
+    domain_separator: Eip712Domain,
+    collection_ids: Vec<FixedBytes<32>>,
+    sender_ids: (PrivateKeySigner, Vec<Address>),
+) -> ContextFixture {
+    let (signer, sender_ids) = sender_ids;
+    let escrow_storage = Arc::new(RwLock::new(HashMap::new()));
+    let query_appraisals = Arc::new(RwLock::new(HashMap::new()));
+
+    let timestamp_check = Arc::new(StatefulTimestampCheck::new(0));
+    let mut checks = get_full_list_of_checks(
+        domain_separator,
+        sender_ids.iter().cloned().collect(),
+        Arc::new(RwLock::new(collection_ids.iter().cloned().collect())),
+        query_appraisals.clone(),
+    );
+    checks.push(timestamp_check);
+
+    ContextFixture {
+        signer,
+        escrow_storage,
+        query_appraisals,
+        checks,
+    }
+}
+
+#[rstest]
+#[tokio::test]
+async fn partial_then_full_check_valid_receipt(
+    domain_separator: Eip712Domain,
+    collection_ids: Vec<FixedBytes<32>>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
+    context: ContextFixture,
+) {
+    let ContextFixture {
+        checks,
+        escrow_storage,
+        query_appraisals,
+        signer,
+        ..
+    } = context;
+
+    let query_value = 20u128;
+    let signed_receipt = Eip712SignedMessage::new(
+        &domain_separator,
+        Receipt::new(
+            collection_ids[0],
+            payer,
+            data_service,
+            service_provider,
+            query_value,
+        )
+        .unwrap(),
+        &signer,
+    )
+    .unwrap();
+
+    let query_id = signed_receipt.unique_hash();
+
+    // add escrow for sender
+    escrow_storage
+        .write()
+        .unwrap()
+        .insert(signer.address(), query_value + 500);
+    // appraise query
+    query_appraisals
+        .write()
+        .unwrap()
+        .insert(query_id, query_value);
+
+    let mut received_receipt = ReceiptWithState::new(signed_receipt);
+
+    let result = received_receipt
+        .perform_checks(&Context::new(), &checks)
+        .await;
+    assert!(result.is_ok());
+}
+
+#[rstest]
+#[tokio::test]
+async fn partial_then_finalize_valid_receipt(
+    collection_ids: Vec<FixedBytes<32>>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
+    domain_separator: Eip712Domain,
+    context: ContextFixture,
+) {
+    let ContextFixture {
+        checks,
+        escrow_storage,
+        query_appraisals,
+        signer,
+        ..
+    } = context;
+
+    let query_value = 20u128;
+    let signed_receipt = Eip712SignedMessage::new(
+        &domain_separator,
+        Receipt::new(
+            collection_ids[0],
+            payer,
+            data_service,
+            service_provider,
+            query_value,
+        )
+        .unwrap(),
+        &signer,
+    )
+    .unwrap();
+    let query_id = signed_receipt.unique_hash();
+
+    // add escrow for sender
+    escrow_storage
+        .write()
+        .unwrap()
+        .insert(signer.address(), query_value + 500);
+    // appraise query
+    query_appraisals
+        .write()
+        .unwrap()
+        .insert(query_id, query_value);
+
+    let received_receipt = ReceiptWithState::new(signed_receipt);
+
+    let awaiting_escrow_receipt = received_receipt
+        .finalize_receipt_checks(&Context::new(), &checks)
+        .await;
+    assert!(awaiting_escrow_receipt.is_ok());
+
+    let checked_receipt = awaiting_escrow_receipt.unwrap();
+    assert!(checked_receipt.is_ok());
+}
+
+#[rstest]
+#[tokio::test]
+async fn standard_lifetime_valid_receipt(
+    collection_ids: Vec<FixedBytes<32>>,
+    payer: Address,
+    data_service: Address,
+    service_provider: Address,
+    domain_separator: Eip712Domain,
+    context: ContextFixture,
+) {
+    let ContextFixture {
+        checks,
+        escrow_storage,
+        query_appraisals,
+        signer,
+        ..
+    } = context;
+
+    let query_value = 20u128;
+    let signed_receipt = Eip712SignedMessage::new(
+        &domain_separator,
+        Receipt::new(
+            collection_ids[0],
+            payer,
+            data_service,
+            service_provider,
+            query_value,
+        )
+        .unwrap(),
+        &signer,
+    )
+    .unwrap();
+
+    let query_id = signed_receipt.unique_hash();
+
+    // add escrow for sender
+    escrow_storage
+        .write()
+        .unwrap()
+        .insert(signer.address(), query_value + 500);
+    // appraise query
+    query_appraisals
+        .write()
+        .unwrap()
+        .insert(query_id, query_value);
+
+    let received_receipt = ReceiptWithState::new(signed_receipt);
+
+    let awaiting_escrow_receipt = received_receipt
+        .finalize_receipt_checks(&Context::new(), &checks)
+        .await;
+    assert!(awaiting_escrow_receipt.is_ok());
+
+    let checked_receipt = awaiting_escrow_receipt.unwrap();
+    assert!(checked_receipt.is_ok());
+}
