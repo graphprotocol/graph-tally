@@ -149,8 +149,6 @@ fn aggregate_receipts_(
     receipts: Vec<Eip712SignedMessage<Receipt>>,
     previous_rav: Option<Eip712SignedMessage<ReceiptAggregateVoucher>>,
 ) -> JsonRpcResult<Eip712SignedMessage<ReceiptAggregateVoucher>> {
-    use crate::receipt_classifier::validate_receipt_batch;
-
     // Return an error if the API version is not supported.
     let api_version = match parse_api_version(api_version.as_str()) {
         Ok(v) => v,
@@ -167,11 +165,11 @@ fn aggregate_receipts_(
         DEPRECATION_WARNING_COUNT.inc();
     }
 
-    // Validate receipt batch
-    if let Err(e) = validate_receipt_batch(&receipts) {
+    // Validate receipt batch is not empty
+    if receipts.is_empty() {
         return Err(jsonrpsee::types::ErrorObject::owned(
             JsonRpcErrorCode::Aggregation as i32,
-            e.to_string(),
+            "Cannot aggregate empty receipt batch".to_string(),
             None::<()>,
         ));
     }
