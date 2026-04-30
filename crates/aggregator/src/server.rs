@@ -86,7 +86,7 @@ lazy_static! {
 /// Do not forget to update the documentation there if you make any changes to the JSON-RPC API.
 #[rpc(server)]
 pub trait Rpc {
-    /// Returns the versions of the TAP JSON-RPC API implemented by this server.
+    /// Returns the versions of the Graph Tally JSON-RPC API implemented by this server.
     #[method(name = "api_versions")]
     fn api_versions(&self) -> JsonRpcResult<GraphTallyRpcApiVersionsInfo>;
 

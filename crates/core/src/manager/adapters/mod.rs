@@ -1,4 +1,4 @@
-//! Context adapters for the TAP manager.
+//! Context adapters for the Graph Tally manager.
 //!
 //! Each adapter should be defined by the user of the library based on their
 //! specific storage and verification requirements. This modular design

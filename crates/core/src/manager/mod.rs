@@ -1,10 +1,10 @@
-//! Point of entry for managing TAP receipts and RAVs.
+//! Point of entry for managing Graph Tally receipts and RAVs.
 //!
-//! The [`crate::manager`] module provides facilities for managing TAP receipt
+//! The [`crate::manager`] module provides facilities for managing Graph Tally receipt
 //! and RAV validation, as well as storage flow.
 //!
 //! This module should be the primary interface for the receiver of funds to
-//! verify, store, and manage TAP receipts and RAVs.
+//! verify, store, and manage Graph Tally receipts and RAVs.
 //! The [`Manager`] struct within this module allows the user to specify what
 //! checks should be performed on receipts, as well as
 //! when these checks should occur (either when a receipt is first received,

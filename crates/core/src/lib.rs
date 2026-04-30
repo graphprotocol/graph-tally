@@ -5,7 +5,7 @@
 //!
 //! ## Getting started
 //!
-//! To get started with the TAP protocol, take a look on the [`manager`] module
+//! To get started with the Graph Tally protocol, take a look on the [`manager`] module
 //! to see how to manage the state channel and implement the needed adapters.
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -31,7 +31,7 @@ fn get_current_timestamp_u64_ns() -> Result<u64> {
         .as_nanos() as u64)
 }
 
-/// The EIP712 domain separator builder for the TAP protocol.
+/// The EIP712 domain separator builder for the Graph Tally protocol.
 ///
 /// This is the current domain separator that is used for the [EIP712](https://eips.ethereum.org/EIPS/eip-712) signature scheme.
 ///

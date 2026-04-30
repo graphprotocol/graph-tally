@@ -1,6 +1,6 @@
 //! Context implementations.
 //!
-//! Contexts are used to store and retrieve data from the TAP manager.
+//! Contexts are used to store and retrieve data from the Graph Tally manager.
 //! They are used to store receipts, escrow, and other data that is required
 //! for the manager to function.
 //! Currently, there's only one context implementation available, which is

@@ -1,4 +1,4 @@
-//! # The Graph TAP structs
+//! # Graph Tally structs
 //!
 //! These structs are used for communication between The Graph systems.
 //!
