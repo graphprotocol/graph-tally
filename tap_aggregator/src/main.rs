@@ -66,10 +66,6 @@ struct Args {
     #[arg(long, env = "TAP_DOMAIN_VERIFYING_CONTRACT")]
     domain_verifying_contract: Option<Address>,
 
-    /// [Unused] Domain salt to be used for the EIP-712 domain separator.
-    #[arg(long, env = "TAP_DOMAIN_SALT")]
-    domain_salt: Option<String>,
-
     #[arg(long, env = "TAP_KAFKA_CONFIG")]
     kafka_config: Option<String>,
 }
@@ -87,7 +83,6 @@ impl std::fmt::Debug for Args {
             .field("metrics_port", &self.metrics_port)
             .field("domain_chain_id", &self.domain_chain_id)
             .field("domain_verifying_contract", &self.domain_verifying_contract)
-            .field("domain_salt", &self.domain_salt)
             .field("kafka_config", &self.kafka_config)
             .finish()
     }
@@ -168,10 +163,6 @@ fn create_eip712_domain(args: &Args) -> Result<Eip712Domain> {
         .as_ref()
         .map(|s| s.parse())
         .transpose()?;
-
-    if args.domain_salt.is_some() {
-        debug!("Parsing domain salt...");
-    }
 
     let verifying_contract = args.domain_verifying_contract;
 
