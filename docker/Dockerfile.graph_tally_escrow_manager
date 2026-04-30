@@ -4,12 +4,11 @@ WORKDIR /root
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
-    cmake \
-    libcurl4-openssl-dev \
     librdkafka-dev \
     libsasl2-dev \
     libssl-dev \
     pkg-config \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
@@ -21,7 +20,7 @@ RUN cargo build --release --bin graph_tally_escrow_manager
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates libsasl2-dev libssl-dev \
+    ca-certificates librdkafka1 libsasl2-2 openssl \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /root/target/release/graph_tally_escrow_manager /usr/local/bin/graph_tally_escrow_manager
 

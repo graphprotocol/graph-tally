@@ -21,7 +21,7 @@ futures-util.workspace = true
 lazy_static.workspace = true
 prometheus.workspace = true
 prost.workspace = true
-rdkafka = { workspace = true, features = ["cmake-build", "gssapi", "tracing"] }
+rdkafka = { workspace = true, features = ["gssapi", "tracing"] }
 reqwest = "0.12.5"
 serde.workspace = true
 serde_json.workspace = true
