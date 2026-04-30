@@ -437,7 +437,7 @@ pub async fn run_server(
     // Create a `TcpListener` using tokio.
     let listener = TcpListener::bind(&format!("0.0.0.0:{port}"))
         .await
-        .expect("Failed to bind to tap-aggregator port");
+        .expect("Failed to bind to graph_tally_aggregator port");
 
     let addr = listener.local_addr()?;
     let handle = tokio::spawn(async move {
@@ -445,7 +445,7 @@ pub async fn run_server(
             .with_graceful_shutdown(shutdown_handler())
             .await
         {
-            log::error!("Tap Aggregator error: {e}");
+            log::error!("Graph Tally Aggregator error: {e}");
         }
     });
 
@@ -936,7 +936,7 @@ mod tests {
     /// that to fit about 250 receipts. We also test with 300 receipts, which should
     /// exceed the limit.
     /// We conclude that a limit of 10MB should fit about 25k receipts, and thus
-    /// the TAP spec will require that the aggregator supports up to 15k receipts
+    /// the Graph Tally spec will require that the aggregator supports up to 15k receipts
     /// per aggregation request as a safe limit.
     #[rstest]
     #[tokio::test]

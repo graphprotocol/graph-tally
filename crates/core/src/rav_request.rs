@@ -1,4 +1,4 @@
-//! Request to Tap Aggregator
+//! Request to Graph Tally Aggregator
 
 use graph_tally_receipt::rav::AggregationError;
 use thegraph_core::alloy::sol_types::SolStruct;

@@ -58,7 +58,7 @@ pub fn graph_tally_eip712_domain(
 }
 
 #[cfg(test)]
-mod tap_tests {
+mod tests {
     use std::str::FromStr;
 
     use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
