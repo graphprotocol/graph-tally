@@ -20,7 +20,7 @@ As described in the [gateway README section on Graph Tally](https://github.com/e
 ## Settings
 
 ```txt
-A JSON-RPC service for the Timeline Aggregation Protocol that lets clients request an aggregate receipt from a list of
+A JSON-RPC service for Graph Tally that lets clients request an aggregate receipt from a list of
 individual receipts.
 
 Usage: graph_tally_aggregator [OPTIONS] --private-key <PRIVATE_KEY>
@@ -164,7 +164,7 @@ We define these warning codes:
                           "0.1"
                       ]
                   },
-                  "message": "The API version 0.0 will be deprecated. Please check https://github.com/graphprotocol/timeline_aggregation_protocol for more information."
+                  "message": "The API version 0.0 will be deprecated. Please check https://github.com/graphprotocol/graph-tally for more information."
               }
           ]
       }

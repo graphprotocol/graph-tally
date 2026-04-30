@@ -2,11 +2,11 @@
 
 | Crate                          | Latest Version                                                                                                                                                                                              |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **graph_tally_aggregator**     | [![GHCR](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=graph_tally_aggregator-*&label=ghcr.io)](https://github.com/graphprotocol/timeline-aggregation-protocol/pkgs/container/graph_tally_aggregator) |
-| **graph_tally_core**           | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=graph_tally_core-*)](https://github.com/graphprotocol/timeline-aggregation-protocol/releases)        |
-| **graph_tally_eip712_message** | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=graph_tally_eip712_message-*)](https://github.com/graphprotocol/timeline-aggregation-protocol/releases) |
-| **graph_tally_graph**          | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=graph_tally_graph-*)](https://github.com/graphprotocol/timeline-aggregation-protocol/releases)       |
-| **graph_tally_receipt**        | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/timeline-aggregation-protocol?filter=graph_tally_receipt-*)](https://github.com/graphprotocol/timeline-aggregation-protocol/releases)     |
+| **graph_tally_aggregator**     | [![GHCR](https://img.shields.io/github/v/release/graphprotocol/graph-tally?filter=graph_tally_aggregator-*&label=ghcr.io)](https://github.com/graphprotocol/graph-tally/pkgs/container/graph_tally_aggregator) |
+| **graph_tally_core**           | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/graph-tally?filter=graph_tally_core-*)](https://github.com/graphprotocol/graph-tally/releases)        |
+| **graph_tally_eip712_message** | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/graph-tally?filter=graph_tally_eip712_message-*)](https://github.com/graphprotocol/graph-tally/releases) |
+| **graph_tally_graph**          | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/graph-tally?filter=graph_tally_graph-*)](https://github.com/graphprotocol/graph-tally/releases)       |
+| **graph_tally_receipt**        | [![GitHub Release](https://img.shields.io/github/v/release/graphprotocol/graph-tally?filter=graph_tally_receipt-*)](https://github.com/graphprotocol/graph-tally/releases)     |
 
 ## Overview
 
@@ -80,4 +80,4 @@ system being off-chain.
 
 Contributions are welcome! Please submit a pull request or open an issue to
 discuss potential changes.
-Also, make sure to follow the [Contributing Guide](https://github.com/graphprotocol/timeline-aggregation-protocol/blob/main/CONTRIBUTING.md).
+Also, make sure to follow the [Contributing Guide](https://github.com/graphprotocol/graph-tally/blob/main/CONTRIBUTING.md).
