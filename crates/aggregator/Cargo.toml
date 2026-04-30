@@ -1,0 +1,47 @@
+[package]
+name = "graph_tally_aggregator"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "A JSON-RPC service for Graph Tally that lets clients request an aggregate receipt from a list of individual receipts."
+
+[[bin]]
+name = "graph_tally_aggregator"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+futures-util.workspace = true
+hyper.workspace = true
+jsonrpsee.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+prometheus.workspace = true
+prost.workspace = true
+rayon.workspace = true
+rdkafka.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+graph_tally_core.workspace = true
+graph_tally_graph.workspace = true
+thegraph-core = { workspace = true, features = ["alloy-eip712"] }
+tokio.workspace = true
+tonic.workspace = true
+tonic-prost.workspace = true
+tower = { workspace = true, features = ["util", "steer", "limit", "timeout"] }
+tower-http = { workspace = true, features = ["timeout"] }
+tracing-subscriber.workspace = true
+
+[build-dependencies]
+tonic-build.workspace = true
+tonic-prost-build.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
+rstest.workspace = true

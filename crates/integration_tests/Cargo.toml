@@ -1,0 +1,29 @@
+[package]
+name = "graph_tally_integration_tests"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+autotests = false
+description = "Integration tests for Graph Tally."
+publish = false
+
+[dependencies]
+graph_tally_aggregator.workspace = true
+graph_tally_core.workspace = true
+graph_tally_graph.workspace = true
+
+anyhow.workspace = true
+jsonrpsee = { workspace = true, features = ["jsonrpsee-http-client"] }
+jsonrpsee-core.workspace = true
+rand.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+thegraph-core = { workspace = true, features = ["alloy-signer-mnemonic"] }
+
+[[test]]
+name = "integration_tests"
+path = "tests/lib.rs"
