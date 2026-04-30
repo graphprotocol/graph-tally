@@ -5,7 +5,7 @@ use std::{collections::HashSet, str::FromStr, time::Duration};
 use anyhow::Result;
 use clap::Parser;
 use graph_tally_aggregator::{metrics, server};
-use graph_tally_core::tap_eip712_domain;
+use graph_tally_core::graph_tally_eip712_domain;
 use log::{debug, info};
 use thegraph_core::alloy::{
     dyn_abi::Eip712Domain, primitives::Address, signers::local::PrivateKeySigner,
@@ -167,7 +167,7 @@ fn create_eip712_domain(args: &Args) -> Result<Eip712Domain> {
     let verifying_contract = args.domain_verifying_contract;
 
     // Create the EIP-712 domain separator.
-    Ok(tap_eip712_domain(
+    Ok(graph_tally_eip712_domain(
         chain_id.unwrap_or(1),
         verifying_contract.unwrap_or_default(),
     ))

@@ -5,10 +5,10 @@ use std::{
 };
 
 use graph_tally_core::{
+    graph_tally_eip712_domain,
     manager::{adapters::ReceiptStore, context::memory::InMemoryContext},
     receipt::{checks::StatefulTimestampCheck, state::Checking, ReceiptWithState},
     signed_message::Eip712SignedMessage,
-    tap_eip712_domain,
 };
 use graph_tally_graph::{Receipt, SignedReceipt};
 use rstest::*;
@@ -20,7 +20,7 @@ use thegraph_core::alloy::{
 
 #[fixture]
 fn domain_separator() -> Eip712Domain {
-    tap_eip712_domain(1, Address::from([0x11u8; 20]))
+    graph_tally_eip712_domain(1, Address::from([0x11u8; 20]))
 }
 
 #[fixture]
@@ -190,7 +190,7 @@ fn safe_truncate_receipts_test(
 
     use rand::{rng, seq::SliceRandom};
 
-    let domain_separator = tap_eip712_domain(1, Address::from([0x11u8; 20]));
+    let domain_separator = graph_tally_eip712_domain(1, Address::from([0x11u8; 20]));
     let collection_id = FixedBytes::from([0xab; 32]);
     let payer = Address::from_str("0xabababababababababababababababababababab").unwrap();
     let data_service = Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap();

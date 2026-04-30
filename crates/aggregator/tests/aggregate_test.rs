@@ -1,11 +1,11 @@
 use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use graph_tally_aggregator::{
-    grpc::v2::{tap_aggregator_client::TapAggregatorClient, RavRequest},
+    grpc::graph_tally::{graph_tally_aggregator_client::GraphTallyAggregatorClient, RavRequest},
     jsonrpsee_helpers::JsonRpcResponse,
     server,
 };
-use graph_tally_core::{signed_message::Eip712SignedMessage, tap_eip712_domain};
+use graph_tally_core::{graph_tally_eip712_domain, signed_message::Eip712SignedMessage};
 use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
 use jsonrpsee::{core::client::ClientT, http_client::HttpClientBuilder, rpc_params};
 use thegraph_core::alloy::{
@@ -16,7 +16,7 @@ use tonic::codec::CompressionEncoding;
 
 #[tokio::test]
 async fn aggregation_test() {
-    let domain_separator = tap_eip712_domain(1, Address::ZERO);
+    let domain_separator = graph_tally_eip712_domain(1, Address::ZERO);
 
     let wallet = PrivateKeySigner::random();
 
@@ -42,7 +42,7 @@ async fn aggregation_test() {
 
     let endpoint = format!("http://127.0.0.1:{}", local_addr.port());
 
-    let mut client = TapAggregatorClient::connect(endpoint.clone())
+    let mut client = GraphTallyAggregatorClient::connect(endpoint.clone())
         .await
         .unwrap()
         .send_compressed(CompressionEncoding::Zstd);

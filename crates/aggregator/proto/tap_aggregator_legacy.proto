@@ -1,0 +1,51 @@
+// DEPRECATED: This proto is maintained for backwards compatibility with existing tap-agents.
+// New clients should use graph_tally.proto instead.
+// This will be removed in a future version.
+syntax = "proto3";
+package tap_aggregator.v2;
+
+import "uint128.proto";
+
+message Receipt {
+  bytes collection_id = 1;
+  bytes payer = 2;
+  bytes data_service = 3;
+  bytes service_provider = 4;
+  uint64 timestamp_ns = 5;
+  uint64 nonce = 6;
+  grpc.uint128.Uint128 value = 7;
+}
+
+message SignedReceipt {
+  Receipt message = 1;
+  bytes signature = 2;
+}
+
+message ReceiptAggregateVoucher {
+  bytes collection_id = 1;
+  bytes payer = 2;
+  bytes data_service = 3;
+  bytes service_provider = 4;
+  uint64 timestamp_ns = 5;
+  grpc.uint128.Uint128 value_aggregate = 6;
+  bytes metadata = 7;
+}
+
+message SignedRav {
+  ReceiptAggregateVoucher message = 1;
+  bytes signature = 2;
+}
+
+message RavRequest {
+  repeated SignedReceipt receipts = 1;
+  optional SignedRav previous_rav = 2;
+}
+
+message RavResponse {
+  SignedRav rav = 1;
+}
+
+service TapAggregator {
+  rpc AggregateReceipts(RavRequest) returns (RavResponse);
+}
+

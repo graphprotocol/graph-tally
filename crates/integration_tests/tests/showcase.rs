@@ -13,10 +13,10 @@ use std::{
 use anyhow::{Error, Result};
 use graph_tally_aggregator::{jsonrpsee_helpers, server as agg_server};
 use graph_tally_core::{
+    graph_tally_eip712_domain,
     manager::context::memory::{checks::get_full_list_of_checks, *},
     receipt::checks::{CheckList, StatefulTimestampCheck},
     signed_message::{Eip712SignedMessage, MessageId},
-    tap_eip712_domain,
 };
 use graph_tally_graph::{Receipt, SignedRav, SignedReceipt};
 use jsonrpsee::{
@@ -131,7 +131,7 @@ fn sender_ids() -> Vec<Address> {
 // Domain separator is used to sign receipts/RAVs according to EIP-712
 #[fixture]
 fn domain_separator() -> Eip712Domain {
-    tap_eip712_domain(1, Address::from([0x11u8; 20]))
+    graph_tally_eip712_domain(1, Address::from([0x11u8; 20]))
 }
 
 // Query price will typically be set by the Indexer. It's assumed to be part of the Indexer service.
