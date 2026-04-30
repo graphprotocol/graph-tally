@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-readme = "README.md"
 description = "Core Graph Tally library: a fast, efficient and trustless unidirectional micro-payments system."
 
 [dependencies]
