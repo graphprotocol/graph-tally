@@ -3,11 +3,11 @@
   "release-type": "rust",
   "draft": false,
   "packages": {
-    "tap_core": {},
-    "tap_graph": {},
-    "tap_eip712_message": {},
-    "tap_receipt": {},
-    "tap_aggregator": {
+    "crates/core": {},
+    "crates/graph": {},
+    "crates/eip712_message": {},
+    "crates/receipt": {},
+    "crates/aggregator": {
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "prerelease": true

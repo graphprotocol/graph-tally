@@ -1,16 +1,16 @@
 version: 2
 updates:
   - package-ecosystem: "cargo"
-    directory: "/tap_aggregator"
+    directory: "/crates/aggregator"
     schedule:
       interval: "daily"
 
   - package-ecosystem: "cargo"
-    directory: "/tap_core"
+    directory: "/crates/core"
     schedule:
       interval: "daily"
 
   - package-ecosystem: "cargo"
-    directory: "/tap_integration_tests"
+    directory: "/crates/integration_tests"
     schedule:
       interval: "daily"

@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY . .
 
-RUN cargo build --release --bin tap_aggregator
+RUN cargo build --release --bin graph_tally_aggregator
 
 ########################################################################################
 
@@ -17,6 +17,6 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates libsasl2-dev openssl \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=build /root/target/release/tap_aggregator /usr/local/bin/tap_aggregator
+COPY --from=build /root/target/release/graph_tally_aggregator /usr/local/bin/graph_tally_aggregator
 
-ENTRYPOINT [ "/usr/local/bin/tap_aggregator" ]
+ENTRYPOINT [ "/usr/local/bin/graph_tally_aggregator" ]
