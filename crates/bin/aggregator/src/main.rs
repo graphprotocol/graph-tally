@@ -11,50 +11,6 @@ use thegraph_core::alloy::{
     dyn_abi::Eip712Domain, primitives::Address, signers::local::PrivateKeySigner,
 };
 
-/// Deprecated environment variable mappings (old -> new)
-const DEPRECATED_ENV_VARS: &[(&str, &str)] = &[
-    ("TAP_PORT", "GRAPH_TALLY_PORT"),
-    ("TAP_PRIVATE_KEY", "GRAPH_TALLY_PRIVATE_KEY"),
-    ("TAP_PUBLIC_KEYS", "GRAPH_TALLY_PUBLIC_KEYS"),
-    (
-        "TAP_MAX_REQUEST_BODY_SIZE",
-        "GRAPH_TALLY_MAX_REQUEST_BODY_SIZE",
-    ),
-    (
-        "TAP_MAX_RESPONSE_BODY_SIZE",
-        "GRAPH_TALLY_MAX_RESPONSE_BODY_SIZE",
-    ),
-    ("TAP_MAX_CONNECTIONS", "GRAPH_TALLY_MAX_CONNECTIONS"),
-    (
-        "TAP_REQUEST_TIMEOUT_SECS",
-        "GRAPH_TALLY_REQUEST_TIMEOUT_SECS",
-    ),
-    ("TAP_METRICS_PORT", "GRAPH_TALLY_METRICS_PORT"),
-    ("TAP_DOMAIN_CHAIN_ID", "GRAPH_TALLY_DOMAIN_CHAIN_ID"),
-    (
-        "TAP_DOMAIN_VERIFYING_CONTRACT",
-        "GRAPH_TALLY_DOMAIN_VERIFYING_CONTRACT",
-    ),
-    ("TAP_KAFKA_CONFIG", "GRAPH_TALLY_KAFKA_CONFIG"),
-];
-
-/// Checks for deprecated TAP_* environment variables and migrates them to GRAPH_TALLY_*.
-/// Prints warnings for any deprecated variables found.
-fn migrate_deprecated_env_vars() {
-    for (old, new) in DEPRECATED_ENV_VARS {
-        if let Ok(value) = std::env::var(old) {
-            eprintln!(
-                "WARNING: Environment variable {} is deprecated, use {} instead",
-                old, new
-            );
-            // Only set the new var if it's not already set
-            if std::env::var(new).is_err() {
-                std::env::set_var(new, value);
-            }
-        }
-    }
-}
-
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -140,9 +96,6 @@ async fn main() -> Result<()> {
     // uses it, and it shows jsonrpsee log spans in the logs (to see client IP, etc).
     // See https://github.com/paritytech/jsonrpsee/pull/922 for more info.
     tracing_subscriber::fmt::init();
-
-    // Migrate deprecated TAP_* env vars to GRAPH_TALLY_* with warnings
-    migrate_deprecated_env_vars();
 
     let args = Args::parse();
     debug!("Settings: {args:?}");
