@@ -1,7 +1,12 @@
 version: 2
 updates:
   - package-ecosystem: "cargo"
-    directory: "/crates/aggregator"
+    directory: "/crates/bin/aggregator"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "cargo"
+    directory: "/crates/bin/escrow_manager"
     schedule:
       interval: "daily"
 

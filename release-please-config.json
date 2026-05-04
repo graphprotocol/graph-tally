@@ -7,7 +7,12 @@
     "crates/graph": {},
     "crates/eip712_message": {},
     "crates/receipt": {},
-    "crates/aggregator": {
+    "crates/bin/aggregator": {
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "prerelease": true
+    },
+    "crates/bin/escrow_manager": {
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "prerelease": true

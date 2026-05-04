@@ -1,7 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/aggregator",
+  "crates/bin/aggregator",
+  "crates/bin/escrow_manager",
   "crates/core",
   "crates/eip712_message",
   "crates/graph",

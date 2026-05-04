@@ -10,7 +10,7 @@ description = "Integration tests for Graph Tally."
 publish = false
 
 [dependencies]
-graph_tally_aggregator = { path = "../aggregator" }
+graph_tally_aggregator = { path = "../bin/aggregator" }
 graph_tally_core = { path = "../core" }
 graph_tally_graph = { path = "../graph" }
 

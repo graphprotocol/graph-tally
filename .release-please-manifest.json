@@ -1,6 +1,7 @@
 {
   ".": "0.0.0",
-  "crates/aggregator": "0.7.0",
+  "crates/bin/aggregator": "0.7.0",
+  "crates/bin/escrow_manager": "1.0.0",
   "crates/core": "7.0.0",
   "crates/integration_tests": "0.1.28",
   "crates/eip712_message": "1.0.0",

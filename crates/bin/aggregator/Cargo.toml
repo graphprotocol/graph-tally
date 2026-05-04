@@ -28,8 +28,8 @@ rdkafka.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 strum.workspace = true
-graph_tally_core = { path = "../core" }
-graph_tally_graph = { path = "../graph" }
+graph_tally_core = { path = "../../core" }
+graph_tally_graph = { path = "../../graph" }
 thegraph-core = { workspace = true, features = ["alloy-eip712"] }
 tokio.workspace = true
 tonic.workspace = true
