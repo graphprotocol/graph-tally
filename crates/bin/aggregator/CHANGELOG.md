@@ -31,6 +31,14 @@
 
 
 
+## [0.7.1](https://github.com/graphprotocol/graph-tally/compare/graph_tally_aggregator-v0.7.0...graph_tally_aggregator-v0.7.1) (2026-05-04)
+
+
+### Features
+
+* bump for release ([#287](https://github.com/graphprotocol/graph-tally/issues/287)) ([3ba2620](https://github.com/graphprotocol/graph-tally/commit/3ba262076754e504d45e421ac3b46f4a517a774f))
+* migrate escrow manager to this repository ([2e3e8af](https://github.com/graphprotocol/graph-tally/commit/2e3e8afc0bc7ad19b89fe7cdc9f608a26697192f))
+
 ## [0.7.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_aggregator-v0.6.4...graph_tally_aggregator-v0.7.0) (2026-04-30)
 
 
