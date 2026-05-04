@@ -58,24 +58,6 @@ Options:
 
 Please refer to [GraphTallyCollector](https://github.com/graphprotocol/contracts/blob/main/packages/horizon/contracts/payments/collectors/GraphTallyCollector.sol) for more information about Receipt Aggregate Voucher signing keys.
 
-### Deprecated Environment Variables
-
-For backwards compatibility, the following `TAP_*` environment variables are still supported but deprecated:
-
-| Deprecated | Use Instead |
-|------------|-------------|
-| `TAP_PORT` | `GRAPH_TALLY_PORT` |
-| `TAP_PRIVATE_KEY` | `GRAPH_TALLY_PRIVATE_KEY` |
-| `TAP_PUBLIC_KEYS` | `GRAPH_TALLY_PUBLIC_KEYS` |
-| `TAP_MAX_REQUEST_BODY_SIZE` | `GRAPH_TALLY_MAX_REQUEST_BODY_SIZE` |
-| `TAP_MAX_RESPONSE_BODY_SIZE` | `GRAPH_TALLY_MAX_RESPONSE_BODY_SIZE` |
-| `TAP_MAX_CONNECTIONS` | `GRAPH_TALLY_MAX_CONNECTIONS` |
-| `TAP_REQUEST_TIMEOUT_SECS` | `GRAPH_TALLY_REQUEST_TIMEOUT_SECS` |
-| `TAP_METRICS_PORT` | `GRAPH_TALLY_METRICS_PORT` |
-| `TAP_DOMAIN_CHAIN_ID` | `GRAPH_TALLY_DOMAIN_CHAIN_ID` |
-| `TAP_DOMAIN_VERIFYING_CONTRACT` | `GRAPH_TALLY_DOMAIN_VERIFYING_CONTRACT` |
-| `TAP_KAFKA_CONFIG` | `GRAPH_TALLY_KAFKA_CONFIG` |
-
 ## Operational recommendations
 
 This is just meant to be a non-exhaustive list of reminders for safely operating the Graph Tally Aggregator. It being an HTTP
