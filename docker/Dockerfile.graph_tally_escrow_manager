@@ -3,7 +3,7 @@ FROM rust:1.91-bookworm AS build
 WORKDIR /root
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsasl2-dev protobuf-compiler \
+    cmake libsasl2-dev protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
