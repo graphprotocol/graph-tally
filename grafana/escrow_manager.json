@@ -60,7 +60,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 4,
         "x": 0,
         "y": 1
       },
@@ -119,8 +119,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 4,
+        "x": 4,
         "y": 1
       },
       "id": 2,
@@ -156,6 +156,134 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Sum of the target escrow balance the funding algorithm is currently aiming for, across all receivers. Driven by debt and `balance_fill_factor`.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 17,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.0-22326976726",
+      "targets": [
+        {
+          "expr": "escrow_total_target_grt",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Target (GRT)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Escrow balance above what the algorithm is asking for. The manager never withdraws, so this only drains as receivers collect. A large value means drift from past debt, not the current funding margin.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 100000
+              },
+              {
+                "color": "orange",
+                "value": 500000
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "id": 18,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.0-22326976726",
+      "targets": [
+        {
+          "expr": "escrow_total_balance_grt - escrow_total_target_grt",
+          "refId": "A"
+        }
+      ],
+      "title": "Idle Capital (GRT)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -178,8 +306,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 4,
+        "x": 16,
         "y": 1
       },
       "id": 3,
@@ -237,8 +365,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 4,
+        "x": 20,
         "y": 1
       },
       "id": 4,
@@ -355,6 +483,35 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Target"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
           }
         ]
       },
@@ -389,12 +546,17 @@
           "refId": "A"
         },
         {
+          "expr": "escrow_total_target_grt",
+          "legendFormat": "Target",
+          "refId": "C"
+        },
+        {
           "expr": "escrow_total_balance_grt",
           "legendFormat": "Balance",
           "refId": "B"
         }
       ],
-      "title": "Debt vs Balance",
+      "title": "Debt vs Target vs Balance",
       "type": "timeseries"
     },
     {
@@ -402,6 +564,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Total balance as a percentage of total debt. The algorithm targets ~1/balance_fill_factor (125% at 0.8, 167% at 0.6). Sustained readings well above target indicate idle capital.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -413,16 +576,24 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": 0
               },
               {
                 "color": "yellow",
-                "value": 150
+                "value": 110
               },
               {
-                "color": "red",
-                "value": 200
+                "color": "green",
+                "value": 125
+              },
+              {
+                "color": "yellow",
+                "value": 175
+              },
+              {
+                "color": "orange",
+                "value": 225
               }
             ]
           },
@@ -1271,6 +1442,99 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Balance above target, per receiver. These accounts receive no deposits until their debt grows back into their balance.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "GRT",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "13.0.0-22326976726",
+      "targets": [
+        {
+          "expr": "topk(10, escrow_balance_grt - escrow_target_grt)",
+          "legendFormat": "{{receiver}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Idle Capital by Receiver (Top 10)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Debt, target, balance and idle capital per receiver. Idle = balance - target; receivers with positive idle are not being funded this cycle.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1366,11 +1630,11 @@
                     },
                     {
                       "color": "yellow",
-                      "value": 150
+                      "value": 110
                     },
                     {
                       "color": "green",
-                      "value": 167
+                      "value": 125
                     }
                   ]
                 }
@@ -1383,14 +1647,77 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Target"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Idle"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 10000
+                    },
+                    {
+                      "color": "orange",
+                      "value": 50000
+                    }
+                  ]
+                }
+              }
+            ]
           }
         ]
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 31
+        "w": 24,
+        "x": 0,
+        "y": 39
       },
       "id": 16,
       "options": {
@@ -1399,7 +1726,7 @@
         "sortBy": [
           {
             "desc": true,
-            "displayName": "Ratio %"
+            "displayName": "Idle"
           }
         ]
       },
@@ -1422,6 +1749,18 @@
           "format": "table",
           "instant": true,
           "refId": "C"
+        },
+        {
+          "expr": "escrow_target_grt",
+          "format": "table",
+          "instant": true,
+          "refId": "D"
+        },
+        {
+          "expr": "escrow_balance_grt - escrow_target_grt",
+          "format": "table",
+          "instant": true,
+          "refId": "E"
         }
       ],
       "title": "All Receivers",
@@ -1440,43 +1779,72 @@
               "Time 1": true,
               "Time 2": true,
               "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
               "__name__": true,
               "__name__ 1": true,
               "__name__ 2": true,
               "__name__ 3": true,
+              "__name__ 4": true,
+              "__name__ 5": true,
               "cluster 1": true,
               "cluster 2": true,
               "cluster 3": true,
+              "cluster 4": true,
+              "cluster 5": true,
               "container 1": true,
               "container 2": true,
               "container 3": true,
+              "container 4": true,
+              "container 5": true,
               "endpoint 1": true,
               "endpoint 2": true,
               "endpoint 3": true,
+              "endpoint 4": true,
+              "endpoint 5": true,
               "instance": true,
               "instance 1": true,
               "instance 2": true,
               "instance 3": true,
+              "instance 4": true,
+              "instance 5": true,
               "job": true,
               "job 1": true,
               "job 2": true,
               "job 3": true,
+              "job 4": true,
+              "job 5": true,
               "namespace 1": true,
               "namespace 2": true,
               "namespace 3": true,
+              "namespace 4": true,
+              "namespace 5": true,
               "pod 1": true,
               "pod 2": true,
               "pod 3": true,
+              "pod 4": true,
+              "pod 5": true,
               "prometheus 1": true,
               "prometheus 2": true,
-              "prometheus 3": true
+              "prometheus 3": true,
+              "prometheus 4": true,
+              "prometheus 5": true
             },
             "includeByName": {},
-            "indexByName": {},
+            "indexByName": {
+              "Value #A": 1,
+              "Value #B": 3,
+              "Value #C": 5,
+              "Value #D": 2,
+              "Value #E": 4,
+              "receiver": 0
+            },
             "renameByName": {
               "Value #A": "Debt",
               "Value #B": "Balance",
               "Value #C": "Ratio %",
+              "Value #D": "Target",
+              "Value #E": "Idle",
               "receiver": "Receiver"
             }
           }
@@ -1515,6 +1883,6 @@
   "timezone": "browser",
   "title": "Graph Tally Escrow Manager",
   "uid": "graph-tally-escrow-manager",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

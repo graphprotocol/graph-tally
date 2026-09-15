@@ -19,6 +19,30 @@ Configuration options are set via a single JSON file. The structure of the file 
 | `dry_run` | If `true`, skip contract calls (useful for testing) |
 | `port_metrics` | Port for Prometheus metrics server (default: 9090) |
 | `update_interval_seconds` | Polling interval for the main loop |
+| `balance_fill_factor` | Funding margin, in the range (0, 1] (default: 0.8) |
+
+## Funding Margin
+
+Each cycle, every receiver's debt is taken as the maximum of: receipts over the last 28 days, RAVs
+on active allocations, and the manual `debts` floor. The escrow balance is then stepped up until debt sits below
+`balance_fill_factor` of the balance, so the target settles at roughly `debt / balance_fill_factor`:
+
+| `balance_fill_factor` | Target balance |
+|---|---|
+| `0.6` | ~1.67x debt |
+| `0.8` (default) | ~1.25x debt |
+| `0.95` | ~1.05x debt |
+
+Steps double from 2 GRT and then grow linearly in 10,000 GRT increments, so the target only
+approximates that ratio for small balances — below ~16,000 GRT the step granularity dominates and
+the effective margin is wider.
+
+Lowering the margin frees capital but leaves less headroom to absorb query volume between cycles.
+Note that total deposits are capped at 10,000 GRT per cycle (`MAX_ADJUSTMENT`), which bounds how
+fast a thin margin can be refilled. **The manager never withdraws**, so raising
+`balance_fill_factor` only affects receivers still being topped up — balances already above their
+target drain only as receivers collect. Validate changes with `dry_run: true` first, and watch
+`escrow_target_grt` against `escrow_balance_grt`.
 
 ## Sender and Signers
 
@@ -106,12 +130,14 @@ curl http://localhost:9090/metrics
 |--------|------|-------------|
 | `escrow_total_debt_grt` | Gauge | Total outstanding debt across all receivers |
 | `escrow_total_balance_grt` | Gauge | Total escrow balance across all receivers |
+| `escrow_total_target_grt` | Gauge | Total target escrow balance across all receivers |
 | `escrow_total_adjustment_grt` | Gauge | Total GRT deposited in the last cycle |
 | `escrow_receiver_count` | Gauge | Number of receivers being tracked |
 | `escrow_loop_duration_seconds` | Histogram | Duration of each polling cycle |
 | `escrow_debt_grt{receiver}` | Gauge | Outstanding debt per receiver |
 | `escrow_balance_grt{receiver}` | Gauge | Escrow balance per receiver |
-| `escrow_adjustment_grt{receiver}` | Gauge | Last adjustment per receiver |
+| `escrow_target_grt{receiver}` | Gauge | Target escrow balance per receiver |
+| `escrow_adjustment_grt{receiver}` | Gauge | Last adjustment per receiver (0 if at or above target) |
 | `escrow_deposit_ok` | Counter | Successful deposit transactions |
 | `escrow_deposit_err` | Counter | Failed deposit transactions |
 | `escrow_deposit_duration` | Histogram | Deposit transaction duration |
