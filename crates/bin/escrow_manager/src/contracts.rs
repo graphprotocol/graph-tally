@@ -19,7 +19,9 @@ sol!(
 );
 use ERC20::ERC20Instance;
 sol!(
-    #[allow(missing_docs)]
+    // `sol!` generates a constructor per event, and some events (e.g. GraphDirectoryInitialized)
+    // have more parameters than clippy's threshold. Nothing we can restructure.
+    #[allow(missing_docs, clippy::too_many_arguments)]
     #[sol(rpc)]
     #[derive(Debug)]
     PaymentsEscrow,
@@ -27,7 +29,7 @@ sol!(
 );
 use PaymentsEscrow::{PaymentsEscrowErrors, PaymentsEscrowInstance};
 sol!(
-    #[allow(missing_docs)]
+    #[allow(missing_docs, clippy::too_many_arguments)]
     #[sol(rpc)]
     #[derive(Debug)]
     GraphTallyCollector,

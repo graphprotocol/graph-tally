@@ -43,10 +43,20 @@ pub struct Config {
     /// Port for metrics server
     #[serde(default = "default_port_metrics")]
     pub port_metrics: u16,
+    /// Fraction of a receiver's target escrow balance that its debt is allowed to reach before the
+    /// balance is raised to the next step. This sets the funding margin: the target balance settles
+    /// at roughly `debt / balance_fill_factor`, so 0.6 funds ~1.67x debt and 0.8 funds ~1.25x.
+    /// Must be in the range (0, 1].
+    #[serde(default = "default_balance_fill_factor")]
+    pub balance_fill_factor: f64,
 }
 
 fn default_port_metrics() -> u16 {
     9090
+}
+
+fn default_balance_fill_factor() -> f64 {
+    0.8
 }
 
 #[derive(Debug, Deserialize)]

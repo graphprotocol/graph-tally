@@ -44,6 +44,13 @@ async fn main() -> anyhow::Result<()> {
         .and_then(|s| serde_json::from_str(&s).map_err(anyhow::Error::from))
         .context("failed to load config")?;
 
+    anyhow::ensure!(
+        (config.balance_fill_factor > 0.0) && (config.balance_fill_factor <= 1.0),
+        "balance_fill_factor must be in the range (0, 1], got {}",
+        config.balance_fill_factor,
+    );
+    tracing::info!(balance_fill_factor = config.balance_fill_factor);
+
     if config.dry_run {
         tracing::info!("dry run mode enabled, contract calls will be skipped");
     }
@@ -215,6 +222,7 @@ async fn main() -> anyhow::Result<()> {
             .total_debt_grt
             .set(debts.values().sum::<u128>() as f64 / GRT as f64);
 
+        let mut total_target: u128 = 0;
         let adjustments: Vec<(Address, u128)> = receivers
             .into_iter()
             .filter_map(|receiver| {
@@ -223,8 +231,21 @@ async fn main() -> anyhow::Result<()> {
                     debts.get(&receiver).copied().unwrap_or(0),
                     config.debts.get(&receiver).copied().unwrap_or(0) as u128 * GRT,
                 );
-                let next_balance = next_balance(debt);
+                let next_balance = next_balance(debt, config.balance_fill_factor);
+                total_target += next_balance;
                 let adjustment = next_balance.saturating_sub(balance);
+                // Record the target and adjustment for every receiver, including those already at
+                // or above their target. Skipping them would leave the gauges holding the last
+                // value they were set to, indefinitely.
+                let receiver_str = format!("{receiver:?}");
+                metrics::METRICS
+                    .target_grt
+                    .with_label_values(&[&receiver_str])
+                    .set(next_balance as f64 / GRT as f64);
+                metrics::METRICS
+                    .adjustment_grt
+                    .with_label_values(&[&receiver_str])
+                    .set(adjustment as f64 / GRT as f64);
                 if adjustment == 0 {
                     return None;
                 }
@@ -232,16 +253,15 @@ async fn main() -> anyhow::Result<()> {
                     ?receiver,
                     balance_grt = (balance as f64) / (GRT as f64),
                     debt_grt = (debt as f64) / (GRT as f64),
+                    target_grt = (next_balance as f64) / (GRT as f64),
                     adjustment_grt = (adjustment as f64) / (GRT as f64),
                 );
-                let receiver_str = format!("{receiver:?}");
-                metrics::METRICS
-                    .adjustment_grt
-                    .with_label_values(&[&receiver_str])
-                    .set(adjustment as f64 / GRT as f64);
                 Some((receiver, adjustment))
             })
             .collect();
+        metrics::METRICS
+            .total_target_grt
+            .set(total_target as f64 / GRT as f64);
 
         let total_adjustment: u128 = adjustments.iter().map(|(_, a)| a).sum();
         tracing::info!(total_adjustment_grt = ((total_adjustment as f64) * 1e-18).ceil() as u64);
@@ -298,9 +318,12 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-fn next_balance(debt: u128) -> u128 {
+/// Target escrow balance for a receiver with the given debt. The balance steps up while debt
+/// reaches `fill_factor` of the current step, so the target settles at roughly `debt / fill_factor`
+/// once the steps are fine-grained (above `MAX_ADJUSTMENT`, where they stop doubling).
+fn next_balance(debt: u128, fill_factor: f64) -> u128 {
     let mut next_round = (MIN_DEPOSIT / GRT) as u32;
-    while (debt as f64) >= ((next_round as u128 * GRT) as f64 * 0.6) {
+    while (debt as f64) >= ((next_round as u128 * GRT) as f64 * fill_factor) {
         next_round = next_round
             .saturating_mul(2)
             .min(next_round + (MAX_ADJUSTMENT / GRT) as u32);
@@ -356,7 +379,38 @@ mod tests {
             (100 * GRT, 256 * GRT),
         ];
         for (debt, expected) in tests {
-            assert_eq!(super::next_balance(debt), expected);
+            assert_eq!(super::next_balance(debt, 0.6), expected);
+        }
+    }
+
+    #[test]
+    fn next_balance_fill_factor() {
+        // A higher fill factor packs debt closer to the target balance, funding a thinner margin.
+        let tests = [
+            (0, MIN_DEPOSIT),
+            (MIN_DEPOSIT, MIN_DEPOSIT * 2),
+            (30 * GRT, 64 * GRT),
+            (70 * GRT, 128 * GRT),
+            // 100 GRT of debt is funded to 256 GRT at 0.6, but only 128 GRT at 0.8.
+            (100 * GRT, 128 * GRT),
+        ];
+        for (debt, expected) in tests {
+            assert_eq!(super::next_balance(debt, 0.8), expected);
+        }
+    }
+
+    #[test]
+    fn next_balance_margin_converges_above_step_cap() {
+        // Once the steps stop doubling, the target tracks debt / fill_factor closely.
+        for fill_factor in [0.6, 0.8, 0.95] {
+            let debt = 580_000 * GRT;
+            let target = super::next_balance(debt, fill_factor);
+            let ratio = (target as f64) / (debt as f64);
+            let expected = 1.0 / fill_factor;
+            assert!(
+                (ratio >= expected) && (ratio < (expected + 0.05)),
+                "fill_factor {fill_factor}: ratio {ratio} not just above {expected}",
+            );
         }
     }
 }

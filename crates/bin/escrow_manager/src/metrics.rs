@@ -11,6 +11,7 @@ lazy_static! {
 pub struct Metrics {
     pub total_debt_grt: Gauge,
     pub total_balance_grt: Gauge,
+    pub total_target_grt: Gauge,
     pub total_adjustment_grt: Gauge,
     pub receiver_count: IntGauge,
     pub loop_duration: Histogram,
@@ -18,6 +19,7 @@ pub struct Metrics {
     // Per-receiver metrics
     pub debt_grt: GaugeVec,
     pub balance_grt: GaugeVec,
+    pub target_grt: GaugeVec,
     pub adjustment_grt: GaugeVec,
 }
 
@@ -32,6 +34,11 @@ impl Metrics {
             total_balance_grt: register_gauge!(
                 "escrow_total_balance_grt",
                 "total escrow balance across all receivers in GRT"
+            )
+            .unwrap(),
+            total_target_grt: register_gauge!(
+                "escrow_total_target_grt",
+                "total target escrow balance across all receivers in GRT"
             )
             .unwrap(),
             total_adjustment_grt: register_gauge!(
@@ -59,6 +66,12 @@ impl Metrics {
             balance_grt: register_gauge_vec!(
                 "escrow_balance_grt",
                 "escrow balance per receiver in GRT",
+                &["receiver"]
+            )
+            .unwrap(),
+            target_grt: register_gauge_vec!(
+                "escrow_target_grt",
+                "target escrow balance per receiver in GRT",
                 &["receiver"]
             )
             .unwrap(),
