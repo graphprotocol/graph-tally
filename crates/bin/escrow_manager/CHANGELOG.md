@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_escrow_manager-v2.0.0...graph_tally_escrow_manager-v2.1.0) (2026-09-16)
+
+
+### Features
+
+* relax debt to escrow ratio requirements ([#18](https://github.com/graphprotocol/graph-tally/issues/18)) ([e91b024](https://github.com/graphprotocol/graph-tally/commit/e91b024cdc6b543eb48fa9524d06b952c616329e))
+
 ## [2.0.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_escrow_manager-v1.0.0...graph_tally_escrow_manager-v2.0.0) (2026-05-04)
 
 
