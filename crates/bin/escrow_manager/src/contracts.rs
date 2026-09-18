@@ -1,6 +1,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use alloy::{
+    eips::BlockId,
     network::EthereumWallet,
     primitives::{keccak256, Address, BlockNumber, Bytes, U256},
     providers::{DynProvider, Provider as _, ProviderBuilder, WalletProvider},
@@ -143,6 +144,21 @@ impl Contracts {
             .context("get withdraw escrow thawing period")?
             .try_into()
             .context("result out of bounds")
+    }
+
+    /// Timestamp of the latest block, for planning against contract-side time checks.
+    ///
+    /// Block timestamps are non-decreasing, so this is a lower bound on the timestamp of whatever
+    /// block a transaction sent now lands in. Planning against it can only be conservative.
+    pub async fn latest_block_timestamp(&self) -> anyhow::Result<u64> {
+        let block = self
+            .payments_escrow
+            .provider()
+            .get_block(BlockId::latest())
+            .await
+            .context("get latest block")?
+            .ok_or_else(|| anyhow!("no latest block"))?;
+        Ok(block.header.timestamp)
     }
 
     /// Set each receiver's thawing amount to `tokens`, batched into one transaction.

@@ -3293,7 +3293,7 @@
         "spec": {
           "id": 27,
           "title": "Withdrawals Failed",
-          "description": "Failed `withdraw` transactions in the selected range. The escrow contract reverts the whole batch if any thaw has not matured, so repeated failures point at clock or subgraph lag beyond the maturity slack.",
+          "description": "Failed `withdraw` transactions in the selected range. The escrow contract reverts the whole batch if any thaw has not matured. Maturity is planned against the latest block timestamp, which cannot run ahead of the executing block, so repeated failures point at a receiver collecting mid-cycle rather than at clock drift.",
           "links": [],
           "data": {
             "kind": "QueryGroup",

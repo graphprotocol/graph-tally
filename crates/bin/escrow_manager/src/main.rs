@@ -8,7 +8,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     io::Write as _,
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 use alloy::{
@@ -34,10 +34,6 @@ static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 const GRT: u128 = 1_000_000_000_000_000_000;
 const MIN_DEPOSIT: u128 = 2 * GRT;
 const MAX_ADJUSTMENT: u128 = 10_000 * GRT;
-/// Grace period added to a thaw's maturity before a withdrawal is attempted. The escrow contract
-/// requires the maturity timestamp to be strictly in the past, and reverts the whole multicall
-/// otherwise, so this absorbs subgraph lag and block timestamp drift.
-const WITHDRAW_MATURITY_SLACK_SECONDS: u64 = 300;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -61,6 +57,13 @@ async fn main() -> anyhow::Result<()> {
     anyhow::ensure!(
         config.withdraw_margin.is_finite() && (config.withdraw_margin >= 0.0),
         "withdraw_margin must be non-negative, got {}",
+        config.withdraw_margin,
+    );
+    // Upper bound catches a fraction written as a percentage. A margin of 25 rather than 0.25 puts
+    // the floor at 26x target, which no balance ever clears, so reclamation silently never runs.
+    anyhow::ensure!(
+        config.withdraw_margin <= 1.0,
+        "withdraw_margin must be at most 1.0 (a fraction, not a percentage), got {}",
         config.withdraw_margin,
     );
     // Converted to basis points so every subsequent calculation on token amounts stays in integer
@@ -266,10 +269,21 @@ async fn main() -> anyhow::Result<()> {
             .total_debt_grt
             .set(debts.values().sum::<u128>() as f64 / GRT as f64);
 
-        let now_unix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+        // Maturity is a contract-side comparison against the block timestamp, so the reference
+        // time has to come from the chain; the local clock has no defined relationship to it. A
+        // failure here skips withdrawals for the cycle rather than falling back to wall clock,
+        // since being early reverts the whole batch while being late costs nothing against a
+        // 28 day horizon.
+        let chain_now = match config.withdraw_enabled {
+            false => None,
+            true => match contracts.latest_block_timestamp().await {
+                Ok(timestamp) => Some(timestamp),
+                Err(err) => {
+                    tracing::error!("{:#}", err.context("get latest block timestamp"));
+                    None
+                }
+            },
+        };
 
         let mut total_target: u128 = 0;
         let mut adjustments: Vec<(Address, u128)> = Default::default();
@@ -328,11 +342,12 @@ async fn main() -> anyhow::Result<()> {
                 );
             }
 
-            // Only withdraw a thaw that has definitely matured and still has a justified amount.
-            // Cancelling clears the timestamp, so a receiver being cancelled this cycle must be
-            // left out or the withdrawal reverts and takes the whole batch with it.
+            // Only withdraw a thaw that has matured and still has a justified amount. Cancelling
+            // clears the timestamp, so a receiver being cancelled this cycle must be left out or
+            // the withdrawal reverts and takes the whole batch with it. The comparison mirrors the
+            // contract's, which is strict.
             let matured = (account.thaw_end_timestamp != 0)
-                && (now_unix > (account.thaw_end_timestamp + WITHDRAW_MATURITY_SLACK_SECONDS));
+                && chain_now.is_some_and(|now| now > account.thaw_end_timestamp);
             if config.withdraw_enabled && matured && (desired_thaw > 0) {
                 tracing::info!(
                     ?receiver,
