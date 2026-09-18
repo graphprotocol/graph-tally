@@ -389,6 +389,40 @@
           "internalType": "address",
           "name": "receiver",
           "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "tokensToThaw",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "evenIfTimerReset",
+          "type": "bool"
+        }
+      ],
+      "name": "adjustThaw",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "tokensThawing",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "collector",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "receiver",
+          "type": "address"
         }
       ],
       "name": "cancelThaw",

@@ -39,10 +39,60 @@ the effective margin is wider.
 
 Lowering the margin frees capital but leaves less headroom to absorb query volume between cycles.
 Note that total deposits are capped at 10,000 GRT per cycle (`MAX_ADJUSTMENT`), which bounds how
-fast a thin margin can be refilled. **The manager never withdraws**, so raising
-`balance_fill_factor` only affects receivers still being topped up — balances already above their
-target drain only as receivers collect. Validate changes with `dry_run: true` first, and watch
-`escrow_target_grt` against `escrow_balance_grt`.
+fast a thin margin can be refilled. Unless reclamation is enabled (see below) the manager only ever
+deposits, so raising `balance_fill_factor` only affects receivers still being topped up — balances
+already above their target drain only as receivers collect. Validate changes with `dry_run: true`
+first, and watch `escrow_target_grt` against `escrow_balance_grt`.
+
+## Reclaiming Escrow
+
+Deposits are one-directional, so a receiver's balance is a high-water mark of its past debt. When
+query volume drops the target falls but the balance does not follow, leaving escrow idle. Setting
+`withdraw_enabled: true` lets the manager reclaim that idle escrow back to the payer wallet.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `withdraw_enabled` | `false` | Reclaim escrow above the target balance |
+| `withdraw_margin` | `0.25` | Headroom kept above target before reclaiming |
+| `min_withdraw_grt` | `500` | Minimum excess required to start reclaiming |
+
+`dry_run: true` covers reclamation along with everything else: the manager logs the full plan each
+cycle — grep for `dry run: skipping` — without sending any transaction, deposits included.
+
+Escrow is only thawed above `target * (1 + withdraw_margin)`, so at the defaults the manager holds
+roughly 1.7x debt and reclaims the rest. There is no separate handling for abandoned accounts: a
+receiver with no debt has a target of 2 GRT, so it falls out of the same rule as the large-excess
+end of the range.
+
+Reclaiming is not instant. It goes through the escrow contract's `thaw` and `withdraw`, so funds
+only return after the contract's thawing period — **28 days on mainnet**. The manager uses
+`adjustThaw` rather than `thaw`, which means a pending amount is tracked downward as debt grows
+while keeping its original maturity date, instead of being cancelled and restarted. In practice the
+amount withdrawn at maturity has been continuously re-validated against current debt for the whole
+period.
+
+Two consequences worth knowing:
+
+- Because the thawing period matches the 28-day receipt window the debt estimate is built from, the
+  debt picture rolls over completely before a thaw matures. The margin is what absorbs debt growth
+  over that period, so size it against how much a single receiver's debt can grow in a month — not
+  just against how much idle capital you want to reclaim.
+- A receiver collecting against its escrow shrinks a pending thaw, and a collection that drains the
+  balance cancels it outright. This is normal and needs no intervention, but it means a reclamation
+  in flight is not guaranteed to complete.
+
+Funding decisions use the balance net of any pending withdrawal, matching the escrow contract's own
+`getBalance`, so coverage still holds once a withdrawal lands. A receiver is therefore never funded
+and reclaimed in the same cycle.
+
+Setting `withdraw_enabled` back to `false` is inert: anything already thawing is left exactly as it
+is and logged as a warning each cycle, rather than being cancelled or withdrawn. To stop reclaiming
+without abandoning work in flight, leave it enabled and raise `withdraw_margin` instead — pending
+amounts then shrink or cancel through the normal path.
+
+Validate with `dry_run: true` first, and watch `escrow_total_thawing_grt` and
+`escrow_thawing_count`. Given the 28-day round trip, that observation period is the only practical
+way to tune these values.
 
 ## Sender and Signers
 
@@ -132,12 +182,21 @@ curl http://localhost:9090/metrics
 | `escrow_total_balance_grt` | Gauge | Total escrow balance across all receivers |
 | `escrow_total_target_grt` | Gauge | Total target escrow balance across all receivers |
 | `escrow_total_adjustment_grt` | Gauge | Total GRT deposited in the last cycle |
+| `escrow_total_thawing_grt` | Gauge | Total escrow pending withdrawal across all receivers |
 | `escrow_receiver_count` | Gauge | Number of receivers being tracked |
+| `escrow_thawing_count` | Gauge | Number of receivers with escrow pending withdrawal |
 | `escrow_loop_duration_seconds` | Histogram | Duration of each polling cycle |
 | `escrow_debt_grt{receiver}` | Gauge | Outstanding debt per receiver |
 | `escrow_balance_grt{receiver}` | Gauge | Escrow balance per receiver |
 | `escrow_target_grt{receiver}` | Gauge | Target escrow balance per receiver |
 | `escrow_adjustment_grt{receiver}` | Gauge | Last adjustment per receiver (0 if at or above target) |
+| `escrow_thawing_grt{receiver}` | Gauge | Escrow pending withdrawal per receiver |
 | `escrow_deposit_ok` | Counter | Successful deposit transactions |
 | `escrow_deposit_err` | Counter | Failed deposit transactions |
 | `escrow_deposit_duration` | Histogram | Deposit transaction duration |
+| `escrow_adjust_thaw_ok` | Counter | Successful thaw adjustment transactions |
+| `escrow_adjust_thaw_err` | Counter | Failed thaw adjustment transactions |
+| `escrow_adjust_thaw_duration` | Histogram | Thaw adjustment transaction duration |
+| `escrow_withdraw_ok` | Counter | Successful withdrawal transactions |
+| `escrow_withdraw_err` | Counter | Failed withdrawal transactions |
+| `escrow_withdraw_duration` | Histogram | Withdrawal transaction duration |

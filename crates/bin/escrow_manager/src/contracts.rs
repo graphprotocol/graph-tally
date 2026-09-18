@@ -1,6 +1,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use alloy::{
+    eips::BlockId,
     network::EthereumWallet,
     primitives::{keccak256, Address, BlockNumber, Bytes, U256},
     providers::{DynProvider, Provider as _, ProviderBuilder, WalletProvider},
@@ -131,6 +132,111 @@ impl Contracts {
             .block_number
             .ok_or_else(|| anyhow!("invalid deposit receipt"))?;
         Ok(block_number)
+    }
+
+    /// Thawing period enforced by the escrow contract before withdrawals can be executed. Set at
+    /// deployment and immutable, so it is read once at startup rather than assumed.
+    pub async fn withdraw_escrow_thawing_period(&self) -> anyhow::Result<u64> {
+        self.payments_escrow
+            .WITHDRAW_ESCROW_THAWING_PERIOD()
+            .call()
+            .await
+            .context("get withdraw escrow thawing period")?
+            .try_into()
+            .context("result out of bounds")
+    }
+
+    /// Timestamp of the latest block, for planning against contract-side time checks.
+    ///
+    /// Block timestamps are non-decreasing, so this is a lower bound on the timestamp of whatever
+    /// block a transaction sent now lands in. Planning against it can only be conservative.
+    pub async fn latest_block_timestamp(&self) -> anyhow::Result<u64> {
+        let block = self
+            .payments_escrow
+            .provider()
+            .get_block(BlockId::latest())
+            .await
+            .context("get latest block")?
+            .ok_or_else(|| anyhow!("no latest block"))?;
+        Ok(block.header.timestamp)
+    }
+
+    /// Set each receiver's thawing amount to `tokens`, batched into one transaction.
+    ///
+    /// Uses `adjustThaw` rather than `thaw`/`cancelThaw` because it is the only variant that is
+    /// safe to call every cycle: decreasing an amount preserves the existing maturity timestamp,
+    /// increasing one is refused outright when it would reset the timer (`evenIfTimerReset` is
+    /// false), and a no-op change writes nothing. A plain `thaw` would restart the thawing period
+    /// on every call.
+    pub async fn adjust_thaw_many(
+        &self,
+        adjustments: impl IntoIterator<Item = (Address, u128)>,
+    ) -> anyhow::Result<BlockNumber> {
+        let calls: Vec<Bytes> = adjustments
+            .into_iter()
+            .map(|(receiver, tokens)| {
+                self.payments_escrow
+                    .adjustThaw(
+                        *self.graph_tally_collector.address(),
+                        receiver,
+                        U256::from(tokens),
+                        false,
+                    )
+                    .calldata()
+                    .clone()
+            })
+            .collect();
+
+        let receipt = self
+            .payments_escrow
+            .multicall(calls)
+            .send()
+            .await
+            .map_err(decoded_err::<PaymentsEscrowErrors>)?
+            .with_timeout(Some(Duration::from_secs(30)))
+            .with_required_confirmations(1)
+            .get_receipt()
+            .await?;
+
+        receipt
+            .block_number
+            .ok_or_else(|| anyhow!("invalid adjust thaw receipt"))
+    }
+
+    /// Withdraw each receiver's matured thawing amount back to the payer, batched into one
+    /// transaction.
+    ///
+    /// The contract requires the maturity timestamp to be strictly in the past and reverts with
+    /// `PaymentsEscrowStillThawing` otherwise, which in a multicall fails the whole batch. Callers
+    /// must only include receivers whose thaw has definitely matured.
+    pub async fn withdraw_many(
+        &self,
+        receivers: impl IntoIterator<Item = Address>,
+    ) -> anyhow::Result<BlockNumber> {
+        let calls: Vec<Bytes> = receivers
+            .into_iter()
+            .map(|receiver| {
+                self.payments_escrow
+                    .withdraw(*self.graph_tally_collector.address(), receiver)
+                    .calldata()
+                    .clone()
+            })
+            .collect();
+
+        let receipt = self
+            .payments_escrow
+            .multicall(calls)
+            .send()
+            .await
+            .map_err(decoded_err::<PaymentsEscrowErrors>)?
+            .with_timeout(Some(Duration::from_secs(30)))
+            .with_required_confirmations(1)
+            .get_receipt()
+            .await?;
+
+        receipt
+            .block_number
+            .ok_or_else(|| anyhow!("invalid withdraw receipt"))
     }
 
     pub async fn authorize_signer(&self, signer: &PrivateKeySigner) -> anyhow::Result<()> {

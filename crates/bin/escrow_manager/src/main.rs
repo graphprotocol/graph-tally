@@ -11,13 +11,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use alloy::{primitives::Address, signers::local::PrivateKeySigner};
+use alloy::{
+    primitives::{Address, BlockNumber},
+    signers::local::PrivateKeySigner,
+};
 use anyhow::{anyhow, Context as _};
 use axum::{http::StatusCode, routing, Router};
 use config::Config;
 use contracts::Contracts;
 use prometheus::Encoder as _;
-use subgraphs::{active_allocations, authorized_signers, escrow_accounts};
+use subgraphs::{active_allocations, authorized_signers, escrow_accounts, EscrowAccount};
 use thegraph_client_subgraphs::Client as SubgraphClient;
 use tokio::{
     net::TcpListener,
@@ -50,6 +53,23 @@ async fn main() -> anyhow::Result<()> {
         config.balance_fill_factor,
     );
     tracing::info!(balance_fill_factor = config.balance_fill_factor);
+
+    anyhow::ensure!(
+        config.withdraw_margin.is_finite() && (config.withdraw_margin >= 0.0),
+        "withdraw_margin must be non-negative, got {}",
+        config.withdraw_margin,
+    );
+    // Upper bound catches a fraction written as a percentage. A margin of 25 rather than 0.25 puts
+    // the floor at 26x target, which no balance ever clears, so reclamation silently never runs.
+    anyhow::ensure!(
+        config.withdraw_margin <= 1.0,
+        "withdraw_margin must be at most 1.0 (a fraction, not a percentage), got {}",
+        config.withdraw_margin,
+    );
+    // Converted to basis points so every subsequent calculation on token amounts stays in integer
+    // arithmetic. `u128` GRT amounts exceed f64's exact range, and these numbers decide transactions.
+    let withdraw_margin_bps = (config.withdraw_margin * 10_000.0).round() as u128;
+    let min_withdraw = config.min_withdraw_grt as u128 * GRT;
 
     if config.dry_run {
         tracing::info!("dry run mode enabled, contract calls will be skipped");
@@ -99,6 +119,23 @@ async fn main() -> anyhow::Result<()> {
                 Err(err) => tracing::error!("failed to authorize signer: {err:#}"),
             };
         }
+    }
+
+    if config.withdraw_enabled {
+        // Read rather than assume: the period is set at deployment and capped at 90 days by the
+        // escrow contract, so the schedule this manager plans against has to come from the chain.
+        let thawing_period = contracts
+            .withdraw_escrow_thawing_period()
+            .await
+            .context("get withdraw escrow thawing period")?;
+        tracing::info!(
+            withdraw_margin = config.withdraw_margin,
+            min_withdraw_grt = config.min_withdraw_grt,
+            thawing_period_days = thawing_period as f64 / 86400.0,
+            "escrow reclamation enabled"
+        );
+    } else {
+        tracing::info!("escrow reclamation disabled, deposits only");
     }
 
     let mut allowance = contracts.allowance().await?;
@@ -181,7 +218,13 @@ async fn main() -> anyhow::Result<()> {
         metrics::METRICS.receiver_count.set(receivers.len() as i64);
         metrics::METRICS
             .total_balance_grt
-            .set(escrow_accounts.values().sum::<u128>() as f64 / GRT as f64);
+            .set(escrow_accounts.values().map(|a| a.balance).sum::<u128>() as f64 / GRT as f64);
+        metrics::METRICS
+            .total_thawing_grt
+            .set(escrow_accounts.values().map(|a| a.thawing).sum::<u128>() as f64 / GRT as f64);
+        metrics::METRICS
+            .thawing_count
+            .set(escrow_accounts.values().filter(|a| a.thawing > 0).count() as i64);
 
         let mut indexer_ravs: BTreeMap<Address, u128> = Default::default();
         {
@@ -207,11 +250,15 @@ async fn main() -> anyhow::Result<()> {
                     ravs = %format!("{:.6}", ravs as f64 * 1e-18),
                 );
                 let receiver_str = format!("{receiver:?}");
-                let balance = escrow_accounts.get(receiver).copied().unwrap_or(0);
+                let account = escrow_accounts.get(receiver).copied().unwrap_or_default();
                 metrics::METRICS
                     .balance_grt
                     .with_label_values(&[&receiver_str])
-                    .set(balance as f64 / GRT as f64);
+                    .set(account.balance as f64 / GRT as f64);
+                metrics::METRICS
+                    .thawing_grt
+                    .with_label_values(&[&receiver_str])
+                    .set(account.thawing as f64 / GRT as f64);
                 metrics::METRICS
                     .debt_grt
                     .with_label_values(&[&receiver_str])
@@ -222,43 +269,107 @@ async fn main() -> anyhow::Result<()> {
             .total_debt_grt
             .set(debts.values().sum::<u128>() as f64 / GRT as f64);
 
-        let mut total_target: u128 = 0;
-        let adjustments: Vec<(Address, u128)> = receivers
-            .into_iter()
-            .filter_map(|receiver| {
-                let balance = escrow_accounts.get(&receiver).cloned().unwrap_or(0);
-                let debt = u128::max(
-                    debts.get(&receiver).copied().unwrap_or(0),
-                    config.debts.get(&receiver).copied().unwrap_or(0) as u128 * GRT,
-                );
-                let next_balance = next_balance(debt, config.balance_fill_factor);
-                total_target += next_balance;
-                let adjustment = next_balance.saturating_sub(balance);
-                // Record the target and adjustment for every receiver, including those already at
-                // or above their target. Skipping them would leave the gauges holding the last
-                // value they were set to, indefinitely.
-                let receiver_str = format!("{receiver:?}");
-                metrics::METRICS
-                    .target_grt
-                    .with_label_values(&[&receiver_str])
-                    .set(next_balance as f64 / GRT as f64);
-                metrics::METRICS
-                    .adjustment_grt
-                    .with_label_values(&[&receiver_str])
-                    .set(adjustment as f64 / GRT as f64);
-                if adjustment == 0 {
-                    return None;
+        // Maturity is a contract-side comparison against the block timestamp, so the reference
+        // time has to come from the chain; the local clock has no defined relationship to it. A
+        // failure here skips withdrawals for the cycle rather than falling back to wall clock,
+        // since being early reverts the whole batch while being late costs nothing against a
+        // 28 day horizon.
+        let chain_now = match config.withdraw_enabled {
+            false => None,
+            true => match contracts.latest_block_timestamp().await {
+                Ok(timestamp) => Some(timestamp),
+                Err(err) => {
+                    tracing::error!("{:#}", err.context("get latest block timestamp"));
+                    None
                 }
+            },
+        };
+
+        let mut total_target: u128 = 0;
+        let mut adjustments: Vec<(Address, u128)> = Default::default();
+        let mut thaw_adjustments: Vec<(Address, u128)> = Default::default();
+        let mut withdrawals: Vec<Address> = Default::default();
+        for receiver in receivers {
+            let account = escrow_accounts.get(&receiver).copied().unwrap_or_default();
+            let debt = u128::max(
+                debts.get(&receiver).copied().unwrap_or(0),
+                config.debts.get(&receiver).copied().unwrap_or(0) as u128 * GRT,
+            );
+            let target = next_balance(debt, config.balance_fill_factor);
+            total_target += target;
+
+            // Amount we want thawing once this cycle's calls land. With reclamation disabled the
+            // existing amount is left exactly as it is, so turning the feature off is inert.
+            let desired_thaw = if config.withdraw_enabled {
+                desired_thawing(&account, target, withdraw_margin_bps, min_withdraw)
+            } else {
+                account.thawing
+            };
+
+            // Fund against the balance that survives a pending withdrawal, so coverage still holds
+            // once it lands. This is also how the escrow contract's own `getBalance` is defined.
+            let effective_balance = account.balance.saturating_sub(desired_thaw);
+            let adjustment = target.saturating_sub(effective_balance);
+
+            // Record for every receiver, including those needing no action. Skipping them would
+            // leave the gauges holding the last value they were set to, indefinitely.
+            let receiver_str = format!("{receiver:?}");
+            metrics::METRICS
+                .target_grt
+                .with_label_values(&[&receiver_str])
+                .set(target as f64 / GRT as f64);
+            metrics::METRICS
+                .adjustment_grt
+                .with_label_values(&[&receiver_str])
+                .set(adjustment as f64 / GRT as f64);
+
+            if desired_thaw != account.thawing {
                 tracing::info!(
                     ?receiver,
-                    balance_grt = (balance as f64) / (GRT as f64),
+                    balance_grt = (account.balance as f64) / (GRT as f64),
                     debt_grt = (debt as f64) / (GRT as f64),
-                    target_grt = (next_balance as f64) / (GRT as f64),
-                    adjustment_grt = (adjustment as f64) / (GRT as f64),
+                    target_grt = (target as f64) / (GRT as f64),
+                    thawing_grt = (account.thawing as f64) / (GRT as f64),
+                    desired_thawing_grt = (desired_thaw as f64) / (GRT as f64),
+                    "thaw adjustment",
                 );
-                Some((receiver, adjustment))
-            })
-            .collect();
+                thaw_adjustments.push((receiver, desired_thaw));
+            } else if !config.withdraw_enabled && (account.thawing > 0) {
+                tracing::warn!(
+                    ?receiver,
+                    thawing_grt = (account.thawing as f64) / (GRT as f64),
+                    "escrow is thawing but reclamation is disabled, leaving it untouched",
+                );
+            }
+
+            // Only withdraw a thaw that has matured and still has a justified amount. Cancelling
+            // clears the timestamp, so a receiver being cancelled this cycle must be left out or
+            // the withdrawal reverts and takes the whole batch with it. The comparison mirrors the
+            // contract's, which is strict.
+            let matured = (account.thaw_end_timestamp != 0)
+                && chain_now.is_some_and(|now| now > account.thaw_end_timestamp);
+            if config.withdraw_enabled && matured && (desired_thaw > 0) {
+                tracing::info!(
+                    ?receiver,
+                    tokens_grt = (desired_thaw as f64) / (GRT as f64),
+                    "withdrawal matured",
+                );
+                withdrawals.push(receiver);
+            }
+
+            if adjustment == 0 {
+                continue;
+            }
+            tracing::info!(
+                ?receiver,
+                balance_grt = (account.balance as f64) / (GRT as f64),
+                effective_balance_grt = (effective_balance as f64) / (GRT as f64),
+                debt_grt = (debt as f64) / (GRT as f64),
+                target_grt = (target as f64) / (GRT as f64),
+                adjustment_grt = (adjustment as f64) / (GRT as f64),
+            );
+            adjustments.push((receiver, adjustment));
+        }
         metrics::METRICS
             .total_target_grt
             .set(total_target as f64 / GRT as f64);
@@ -268,6 +379,42 @@ async fn main() -> anyhow::Result<()> {
         metrics::METRICS
             .total_adjustment_grt
             .set(total_adjustment as f64 / GRT as f64);
+        // Tracked across all three phases so a failure in one does not skip the others, and the
+        // subgraph client is only pinned forward once.
+        let mut latest_tx_block: Option<BlockNumber> = None;
+
+        // Thaw adjustments run first: shrinking or cancelling a thaw is the protective action, and
+        // the deposit amounts computed above already assume it has happened.
+        if !thaw_adjustments.is_empty() {
+            if config.dry_run {
+                for (receiver, tokens) in &thaw_adjustments {
+                    tracing::info!(
+                        ?receiver,
+                        tokens_grt = (*tokens as f64) / (GRT as f64),
+                        "dry run: skipping adjust thaw"
+                    );
+                }
+            } else {
+                let start = Instant::now();
+                let result = contracts.adjust_thaw_many(thaw_adjustments).await;
+                metrics::METRICS
+                    .adjust_thaw
+                    .duration
+                    .observe(start.elapsed().as_secs_f64());
+                match result {
+                    Ok(block) => {
+                        metrics::METRICS.adjust_thaw.ok.inc();
+                        latest_tx_block = latest_tx_block.max(Some(block));
+                        tracing::info!("thaw adjustments complete");
+                    }
+                    Err(adjust_thaw_err) => {
+                        metrics::METRICS.adjust_thaw.err.inc();
+                        tracing::error!("{:#}", adjust_thaw_err.context("adjust thaw"));
+                    }
+                }
+            }
+        }
+
         if total_adjustment > 0 {
             let adjustments = if total_adjustment <= MAX_ADJUSTMENT {
                 adjustments
@@ -282,25 +429,54 @@ async fn main() -> anyhow::Result<()> {
                         "dry run: skipping deposit"
                     );
                 }
-                continue;
+            } else {
+                let deposit_start = Instant::now();
+                let deposit_result = contracts.deposit_many(adjustments).await;
+                metrics::METRICS
+                    .deposit
+                    .duration
+                    .observe(deposit_start.elapsed().as_secs_f64());
+                match deposit_result {
+                    Ok(block) => {
+                        metrics::METRICS.deposit.ok.inc();
+                        latest_tx_block = latest_tx_block.max(Some(block));
+                        tracing::info!("adjustments complete");
+                    }
+                    Err(deposit_err) => {
+                        metrics::METRICS.deposit.err.inc();
+                        tracing::error!("{:#}", deposit_err.context("deposit"));
+                    }
+                }
             }
-            let deposit_start = Instant::now();
-            let deposit_result = contracts.deposit_many(adjustments).await;
-            metrics::METRICS
-                .deposit
-                .duration
-                .observe(deposit_start.elapsed().as_secs_f64());
-            let tx_block = match deposit_result {
-                Ok(block) => {
-                    metrics::METRICS.deposit.ok.inc();
-                    block
+        }
+
+        if !withdrawals.is_empty() {
+            if config.dry_run {
+                for receiver in &withdrawals {
+                    tracing::info!(?receiver, "dry run: skipping withdraw");
                 }
-                Err(deposit_err) => {
-                    metrics::METRICS.deposit.err.inc();
-                    tracing::error!("{:#}", deposit_err.context("deposit"));
-                    continue;
+            } else {
+                let start = Instant::now();
+                let result = contracts.withdraw_many(withdrawals).await;
+                metrics::METRICS
+                    .withdraw
+                    .duration
+                    .observe(start.elapsed().as_secs_f64());
+                match result {
+                    Ok(block) => {
+                        metrics::METRICS.withdraw.ok.inc();
+                        latest_tx_block = latest_tx_block.max(Some(block));
+                        tracing::info!("withdrawals complete");
+                    }
+                    Err(withdraw_err) => {
+                        metrics::METRICS.withdraw.err.inc();
+                        tracing::error!("{:#}", withdraw_err.context("withdraw"));
+                    }
                 }
-            };
+            }
+        }
+
+        if let Some(tx_block) = latest_tx_block {
             network_subgraph = SubgraphClient::builder(
                 network_subgraph.http_client,
                 network_subgraph.subgraph_url,
@@ -308,8 +484,6 @@ async fn main() -> anyhow::Result<()> {
             .with_auth_token(Some(config.query_auth.clone()))
             .with_subgraph_latest_block(tx_block)
             .build();
-
-            tracing::info!("adjustments complete");
         }
 
         metrics::METRICS
@@ -329,6 +503,34 @@ fn next_balance(debt: u128, fill_factor: f64) -> u128 {
             .min(next_round + (MAX_ADJUSTMENT / GRT) as u32);
     }
     next_round as u128 * GRT
+}
+
+/// Escrow that should be thawing for a receiver once this cycle's calls land.
+///
+/// Escrow is only reclaimed above `target * (1 + margin)`. That headroom absorbs debt growth over
+/// the thawing period, and provides hysteresis against the target's step ladder.
+///
+/// `adjustThaw` refuses an increase that would reset a running timer, so a thaw already in flight
+/// can only be tracked downward. This mirrors that, both so the amount withdrawn at maturity has
+/// been continuously re-validated against current debt, and so funding decisions agree with what
+/// the contract will actually hold. The minimum only gates starting a thaw: once one is running the
+/// amount follows the excess down past the minimum, because shrinking keeps the maturity timestamp
+/// whereas cancelling would forfeit the whole thawing period.
+fn desired_thawing(
+    account: &EscrowAccount,
+    target: u128,
+    margin_bps: u128,
+    min_withdraw: u128,
+) -> u128 {
+    let floor = target + (target / 10_000) * margin_bps;
+    let excess = account.balance.saturating_sub(floor);
+    if account.thawing > 0 {
+        excess.min(account.thawing)
+    } else if excess >= min_withdraw {
+        excess
+    } else {
+        0
+    }
 }
 
 fn reduce_adjustments(adjustments: Vec<(Address, u128)>) -> Vec<(Address, u128)> {
@@ -364,7 +566,106 @@ async fn handle_metrics() -> impl axum::response::IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{GRT, MIN_DEPOSIT};
+    use super::{EscrowAccount, GRT, MIN_DEPOSIT};
+
+    const MARGIN_BPS: u128 = 2_500;
+    const MIN_WITHDRAW: u128 = 500 * GRT;
+
+    fn account(balance: u128, thawing: u128) -> EscrowAccount {
+        EscrowAccount {
+            balance,
+            thawing,
+            thaw_end_timestamp: if thawing > 0 { 1 } else { 0 },
+        }
+    }
+
+    fn desired(balance: u128, thawing: u128, target: u128) -> u128 {
+        super::desired_thawing(&account(balance, thawing), target, MARGIN_BPS, MIN_WITHDRAW)
+    }
+
+    #[test]
+    fn desired_thawing_applies_margin_above_target() {
+        let target = 10_000 * GRT;
+        // Nothing is reclaimed until the balance clears target * 1.25.
+        assert_eq!(desired(12_500 * GRT, 0, target), 0);
+        assert_eq!(desired(12_999 * GRT, 0, target), 0);
+        // Above the floor, only the excess over it is reclaimed.
+        assert_eq!(desired(20_000 * GRT, 0, target), 7_500 * GRT);
+    }
+
+    #[test]
+    fn desired_thawing_respects_minimum_when_starting() {
+        let target = 10_000 * GRT;
+        // An excess under the minimum is not worth a 28 day round trip.
+        assert_eq!(desired(12_999 * GRT, 0, target), 0);
+        assert_eq!(desired(13_000 * GRT, 0, target), 500 * GRT);
+    }
+
+    #[test]
+    fn desired_thawing_tracks_a_running_thaw_downward() {
+        // Target climbed a rung, so the justified excess shrank. Following it down preserves the
+        // maturity timestamp; cancelling and re-thawing would forfeit the thawing period.
+        assert_eq!(
+            desired(20_000 * GRT, 7_500 * GRT, 14_000 * GRT),
+            2_500 * GRT
+        );
+        // Below the minimum too: the threshold only gates starting a thaw.
+        assert_eq!(desired(20_000 * GRT, 7_500 * GRT, 15_900 * GRT), 125 * GRT);
+        // Excess gone entirely: cancel.
+        assert_eq!(desired(20_000 * GRT, 7_500 * GRT, 16_000 * GRT), 0);
+        assert_eq!(desired(20_000 * GRT, 7_500 * GRT, 30_000 * GRT), 0);
+    }
+
+    #[test]
+    fn desired_thawing_never_grows_a_running_thaw() {
+        // The contract refuses an increase that would reset the timer, so asking for one would
+        // silently do nothing. Report what the contract will actually hold instead.
+        let target = 10_000 * GRT;
+        assert_eq!(desired(40_000 * GRT, 7_500 * GRT, target), 7_500 * GRT);
+    }
+
+    #[test]
+    fn deposits_and_reclaims_are_mutually_exclusive() {
+        // A receiver can never be funded and reclaimed in the same cycle: reclaiming leaves the
+        // effective balance at the floor, which is above target by construction.
+        for debt_grt in [0, 1, 500, 12_345, 100_000, 580_000] {
+            for balance_grt in [0, 2, 1_000, 40_000, 96_384, 1_000_000] {
+                for thawing_grt in [0, 100, 20_000] {
+                    let balance = balance_grt * GRT;
+                    let thawing = u128::min(thawing_grt * GRT, balance);
+                    let target = super::next_balance(debt_grt * GRT, 0.8);
+                    let thaw = super::desired_thawing(
+                        &account(balance, thawing),
+                        target,
+                        MARGIN_BPS,
+                        MIN_WITHDRAW,
+                    );
+                    let adjustment = target.saturating_sub(balance.saturating_sub(thaw));
+                    assert!(
+                        (thaw == 0) || (adjustment == 0),
+                        "debt {debt_grt} balance {balance_grt} thawing {thawing_grt}: \
+                         thaw {thaw} and adjustment {adjustment}",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn desired_thawing_never_exceeds_balance() {
+        for balance_grt in [0, 2, 1_000, 96_384] {
+            for target_grt in [2, 1_000, 96_384] {
+                let balance = balance_grt * GRT;
+                let thaw = super::desired_thawing(
+                    &account(balance, 0),
+                    target_grt * GRT,
+                    MARGIN_BPS,
+                    MIN_WITHDRAW,
+                );
+                assert!(thaw <= balance, "balance {balance_grt} target {target_grt}");
+            }
+        }
+    }
 
     #[test]
     fn next_balance() {
