@@ -57,7 +57,7 @@ pub struct Config {
     pub withdraw_enabled: bool,
     /// Headroom kept above the target balance before any escrow is reclaimed: escrow is only
     /// thawed above `target * (1 + withdraw_margin)`. This absorbs debt growth over the thawing
-    /// period and provides hysteresis against the step ladder, so it should comfortably exceed the
+    /// period and provides hysteresis against the deposit step ladder, so it should comfortably exceed the
     /// debt growth expected for a single receiver over that period. Must be in the range [0, 1].
     #[serde(default = "default_withdraw_margin")]
     pub withdraw_margin: f64,
