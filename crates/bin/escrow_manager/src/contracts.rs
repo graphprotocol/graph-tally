@@ -39,7 +39,6 @@ sol!(
 use GraphTallyCollector::{GraphTallyCollectorErrors, GraphTallyCollectorInstance};
 
 pub struct Contracts {
-    /// Held directly for chain-level calls that belong to no particular contract.
     provider: DynProvider,
     payments_escrow: PaymentsEscrowInstance<DynProvider>,
     graph_tally_collector: GraphTallyCollectorInstance<DynProvider>,
