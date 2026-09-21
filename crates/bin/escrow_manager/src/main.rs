@@ -122,8 +122,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if config.withdraw_enabled {
-        // Read rather than assume: the period is set at deployment and capped at 90 days by the
-        // escrow contract, so the schedule this manager plans against has to come from the chain.
         let thawing_period = contracts
             .withdraw_escrow_thawing_period()
             .await
