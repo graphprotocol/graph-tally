@@ -285,9 +285,15 @@ async fn main() -> anyhow::Result<()> {
             },
         };
 
+        let reclaim = config.withdraw_enabled.then_some(Reclaim {
+            chain_now,
+            margin_bps: withdraw_margin_bps,
+            min_withdraw,
+        });
+
         let mut total_target: u128 = 0;
         let mut adjustments: Vec<(Address, u128)> = Default::default();
-        let mut thaw_adjustments: Vec<(Address, u128)> = Default::default();
+        let mut thaws: Vec<(Address, u128)> = Default::default();
         let mut withdrawals: Vec<Address> = Default::default();
         for receiver in receivers {
             let account = escrow_accounts.get(&receiver).copied().unwrap_or_default();
@@ -298,18 +304,7 @@ async fn main() -> anyhow::Result<()> {
             let target = next_balance(debt, config.balance_fill_factor);
             total_target += target;
 
-            // Amount we want thawing once this cycle's calls land. With reclamation disabled the
-            // existing amount is left exactly as it is, so turning the feature off is inert.
-            let desired_thaw = if config.withdraw_enabled {
-                desired_thawing(&account, target, withdraw_margin_bps, min_withdraw)
-            } else {
-                account.thawing
-            };
-
-            // Fund against the balance that survives a pending withdrawal, so coverage still holds
-            // once it lands. This is also how the escrow contract's own `getBalance` is defined.
-            let effective_balance = account.balance.saturating_sub(desired_thaw);
-            let adjustment = target.saturating_sub(effective_balance);
+            let action = decide(&account, target, reclaim);
 
             // Record for every receiver, including those needing no action. Skipping them would
             // leave the gauges holding the last value they were set to, indefinitely.
@@ -321,20 +316,12 @@ async fn main() -> anyhow::Result<()> {
             metrics::METRICS
                 .adjustment_grt
                 .with_label_values(&[&receiver_str])
-                .set(adjustment as f64 / GRT as f64);
+                .set(match action {
+                    Action::Deposit(amount) => amount as f64 / GRT as f64,
+                    _ => 0.0,
+                });
 
-            if desired_thaw != account.thawing {
-                tracing::info!(
-                    ?receiver,
-                    balance_grt = (account.balance as f64) / (GRT as f64),
-                    debt_grt = (debt as f64) / (GRT as f64),
-                    target_grt = (target as f64) / (GRT as f64),
-                    thawing_grt = (account.thawing as f64) / (GRT as f64),
-                    desired_thawing_grt = (desired_thaw as f64) / (GRT as f64),
-                    "thaw adjustment",
-                );
-                thaw_adjustments.push((receiver, desired_thaw));
-            } else if !config.withdraw_enabled && (account.thawing > 0) {
+            if !config.withdraw_enabled && (account.thawing > 0) {
                 tracing::warn!(
                     ?receiver,
                     thawing_grt = (account.thawing as f64) / (GRT as f64),
@@ -342,33 +329,39 @@ async fn main() -> anyhow::Result<()> {
                 );
             }
 
-            // Only withdraw a thaw that has matured and still has a justified amount. Cancelling
-            // clears the timestamp, so a receiver being cancelled this cycle must be left out or
-            // the withdrawal reverts and takes the whole batch with it. The comparison mirrors the
-            // contract's, which is strict.
-            let matured = (account.thaw_end_timestamp != 0)
-                && chain_now.is_some_and(|now| now > account.thaw_end_timestamp);
-            if config.withdraw_enabled && matured && (desired_thaw > 0) {
-                tracing::info!(
-                    ?receiver,
-                    tokens_grt = (desired_thaw as f64) / (GRT as f64),
-                    "withdrawal matured",
-                );
-                withdrawals.push(receiver);
+            match action {
+                Action::Nothing => (),
+                Action::Withdraw => {
+                    tracing::info!(
+                        ?receiver,
+                        thawing_grt = (account.thawing as f64) / (GRT as f64),
+                        "withdrawal matured",
+                    );
+                    withdrawals.push(receiver);
+                }
+                Action::Deposit(amount) => {
+                    tracing::info!(
+                        ?receiver,
+                        balance_grt = (account.balance as f64) / (GRT as f64),
+                        thawing_grt = (account.thawing as f64) / (GRT as f64),
+                        debt_grt = (debt as f64) / (GRT as f64),
+                        target_grt = (target as f64) / (GRT as f64),
+                        adjustment_grt = (amount as f64) / (GRT as f64),
+                    );
+                    adjustments.push((receiver, amount));
+                }
+                Action::Thaw(amount) => {
+                    tracing::info!(
+                        ?receiver,
+                        balance_grt = (account.balance as f64) / (GRT as f64),
+                        debt_grt = (debt as f64) / (GRT as f64),
+                        target_grt = (target as f64) / (GRT as f64),
+                        thaw_grt = (amount as f64) / (GRT as f64),
+                        "thawing idle escrow",
+                    );
+                    thaws.push((receiver, amount));
+                }
             }
-
-            if adjustment == 0 {
-                continue;
-            }
-            tracing::info!(
-                ?receiver,
-                balance_grt = (account.balance as f64) / (GRT as f64),
-                effective_balance_grt = (effective_balance as f64) / (GRT as f64),
-                debt_grt = (debt as f64) / (GRT as f64),
-                target_grt = (target as f64) / (GRT as f64),
-                adjustment_grt = (adjustment as f64) / (GRT as f64),
-            );
-            adjustments.push((receiver, adjustment));
         }
         metrics::METRICS
             .total_target_grt
@@ -380,36 +373,35 @@ async fn main() -> anyhow::Result<()> {
             .total_adjustment_grt
             .set(total_adjustment as f64 / GRT as f64);
         // Tracked across all three phases so a failure in one does not skip the others, and the
-        // subgraph client is only pinned forward once.
+        // subgraph client is only pinned forward once. The phases share no receivers, so their
+        // order carries no meaning and a failure in one cannot corrupt another.
         let mut latest_tx_block: Option<BlockNumber> = None;
 
-        // Thaw adjustments run first: shrinking or cancelling a thaw is the protective action, and
-        // the deposit amounts computed above already assume it has happened.
-        if !thaw_adjustments.is_empty() {
+        if !thaws.is_empty() {
             if config.dry_run {
-                for (receiver, tokens) in &thaw_adjustments {
+                for (receiver, tokens) in &thaws {
                     tracing::info!(
                         ?receiver,
                         tokens_grt = (*tokens as f64) / (GRT as f64),
-                        "dry run: skipping adjust thaw"
+                        "dry run: skipping thaw"
                     );
                 }
             } else {
                 let start = Instant::now();
-                let result = contracts.adjust_thaw_many(thaw_adjustments).await;
+                let result = contracts.thaw_many(thaws).await;
                 metrics::METRICS
-                    .adjust_thaw
+                    .thaw
                     .duration
                     .observe(start.elapsed().as_secs_f64());
                 match result {
                     Ok(block) => {
-                        metrics::METRICS.adjust_thaw.ok.inc();
+                        metrics::METRICS.thaw.ok.inc();
                         latest_tx_block = latest_tx_block.max(Some(block));
-                        tracing::info!("thaw adjustments complete");
+                        tracing::info!("thaws complete");
                     }
-                    Err(adjust_thaw_err) => {
-                        metrics::METRICS.adjust_thaw.err.inc();
-                        tracing::error!("{:#}", adjust_thaw_err.context("adjust thaw"));
+                    Err(thaw_err) => {
+                        metrics::METRICS.thaw.err.inc();
+                        tracing::error!("{:#}", thaw_err.context("thaw"));
                     }
                 }
             }
@@ -505,31 +497,80 @@ fn next_balance(debt: u128, fill_factor: f64) -> u128 {
     next_round as u128 * GRT
 }
 
-/// Escrow that should be thawing for a receiver once this cycle's calls land.
-///
-/// Escrow is only reclaimed above `target * (1 + margin)`. That headroom absorbs debt growth over
-/// the thawing period, and provides hysteresis against the target's step ladder.
-///
-/// `adjustThaw` refuses an increase that would reset a running timer, so a thaw already in flight
-/// can only be tracked downward. This mirrors that, both so the amount withdrawn at maturity has
-/// been continuously re-validated against current debt, and so funding decisions agree with what
-/// the contract will actually hold. The minimum only gates starting a thaw: once one is running the
-/// amount follows the excess down past the minimum, because shrinking keeps the maturity timestamp
-/// whereas cancelling would forfeit the whole thawing period.
-fn desired_thawing(
-    account: &EscrowAccount,
-    target: u128,
+/// Reclamation policy for a cycle, present only when `withdraw_enabled`.
+#[derive(Clone, Copy)]
+struct Reclaim {
+    /// Latest block timestamp, or `None` when it could not be read this cycle. Withdrawals are
+    /// then skipped rather than planned against the local clock, which has no defined relationship
+    /// to the block timestamp the contract compares against.
+    chain_now: Option<u64>,
     margin_bps: u128,
     min_withdraw: u128,
-) -> u128 {
-    let floor = target + (target / 10_000) * margin_bps;
-    let excess = account.balance.saturating_sub(floor);
+}
+
+/// The one action taken for a receiver in a cycle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Action {
+    Nothing,
+    /// A matured thaw is ready to come back to the payer. The contract withdraws whatever is
+    /// thawing at execution time, so no amount is carried here.
+    Withdraw,
+    /// Effective balance is short of the target; top it up by this much.
+    Deposit(u128),
+    /// Idle escrow above the margin is worth reclaiming; start thawing this much.
+    Thaw(u128),
+}
+
+/// Decide the single action to take for a receiver this cycle.
+///
+/// Exactly one action applies, which is what keeps the three transaction batches independent: no
+/// receiver ever appears in more than one, so no batch depends on another having landed first.
+///
+/// The branches are ordered so each is decided against state the earlier ones cannot invalidate:
+///
+/// - Withdrawal comes first because it leaves `balance - thawing` untouched — the contract zeroes
+///   both together — so taking it can never leave an account short. It only defers a deposit by a
+///   cycle.
+/// - Funding is decided against `balance - thawing`, matching the escrow contract's own
+///   `getBalance`. Escrow already committed to leaving cannot count as coverage.
+/// - A thaw only ever starts from nothing. The contract cannot grow a running thaw without
+///   resetting its timer, so excess accumulating after one starts waits for the next rather than
+///   being chased every cycle. Debt that grows meanwhile is covered by the deposit branch, which
+///   is why the reclaimed amount need not be re-validated against it.
+fn decide(account: &EscrowAccount, target: u128, reclaim: Option<Reclaim>) -> Action {
+    // `tokensThawing == 0` implies `thawEndTimestamp == 0` on chain, but the timestamp is what the
+    // contract checks, and a withdrawal that reverts takes the whole batch with it. The comparison
+    // mirrors the contract's, which is strict.
+    let matured = (account.thaw_end_timestamp != 0)
+        && (account.thawing > 0)
+        && reclaim
+            .and_then(|reclaim| reclaim.chain_now)
+            .is_some_and(|now| now > account.thaw_end_timestamp);
+    if matured {
+        return Action::Withdraw;
+    }
+
+    let effective_balance = account.balance.saturating_sub(account.thawing);
+    let deposit = target.saturating_sub(effective_balance);
+    if deposit > 0 {
+        return Action::Deposit(deposit);
+    }
+
+    let Some(reclaim) = reclaim else {
+        return Action::Nothing;
+    };
     if account.thawing > 0 {
-        excess.min(account.thawing)
-    } else if excess >= min_withdraw {
-        excess
-    } else {
-        0
+        return Action::Nothing;
+    }
+    // Escrow is only reclaimed above `target * (1 + margin)`. That headroom absorbs debt growth
+    // over the thawing period, and keeps ordinary fluctuation from bouncing between depositing and
+    // thawing — without it the deposit and thaw branches would partition the whole range and one
+    // of them would fire every cycle.
+    let floor = target + (target / 10_000) * reclaim.margin_bps;
+    let excess = account.balance.saturating_sub(floor);
+    match (excess > 0) && (excess >= reclaim.min_withdraw) {
+        true => Action::Thaw(excess),
+        false => Action::Nothing,
     }
 }
 
@@ -566,103 +607,159 @@ async fn handle_metrics() -> impl axum::response::IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{EscrowAccount, GRT, MIN_DEPOSIT};
+    use super::{Action, EscrowAccount, Reclaim, GRT, MIN_DEPOSIT};
 
     const MARGIN_BPS: u128 = 2_500;
     const MIN_WITHDRAW: u128 = 500 * GRT;
+    const NOW: u64 = 1_000_000;
+    const MATURED: u64 = NOW - 1;
+    const PENDING: u64 = NOW + 1;
 
-    fn account(balance: u128, thawing: u128) -> EscrowAccount {
+    fn account(balance: u128, thawing: u128, thaw_end_timestamp: u64) -> EscrowAccount {
         EscrowAccount {
             balance,
             thawing,
-            thaw_end_timestamp: if thawing > 0 { 1 } else { 0 },
+            thaw_end_timestamp,
         }
     }
 
-    fn desired(balance: u128, thawing: u128, target: u128) -> u128 {
-        super::desired_thawing(&account(balance, thawing), target, MARGIN_BPS, MIN_WITHDRAW)
+    fn reclaim(chain_now: Option<u64>) -> Option<Reclaim> {
+        Some(Reclaim {
+            chain_now,
+            margin_bps: MARGIN_BPS,
+            min_withdraw: MIN_WITHDRAW,
+        })
+    }
+
+    fn decide(balance: u128, thawing: u128, thaw_end_timestamp: u64, target: u128) -> Action {
+        super::decide(
+            &account(balance, thawing, thaw_end_timestamp),
+            target,
+            reclaim(Some(NOW)),
+        )
     }
 
     #[test]
-    fn desired_thawing_applies_margin_above_target() {
+    fn withdraws_a_matured_thaw() {
+        // Maturity mirrors the contract's strict comparison against the block timestamp.
+        assert_eq!(
+            decide(20_000 * GRT, 7_500 * GRT, MATURED, 10_000 * GRT),
+            Action::Withdraw
+        );
+        assert_eq!(
+            decide(20_000 * GRT, 7_500 * GRT, NOW, 10_000 * GRT),
+            Action::Nothing
+        );
+    }
+
+    #[test]
+    fn withdrawal_comes_before_funding() {
+        // A withdrawal zeroes balance and thawing together, leaving `balance - thawing` untouched,
+        // so taking it first cannot leave the account short. The deposit follows next cycle.
+        assert_eq!(
+            decide(20_000 * GRT, 7_500 * GRT, MATURED, 18_000 * GRT),
+            Action::Withdraw
+        );
+    }
+
+    #[test]
+    fn funds_against_the_balance_net_of_thawing() {
+        // Escrow committed to leaving cannot count as coverage, so debt growth during a thaw is
+        // answered with a deposit. This is what makes re-validating the thawing amount unnecessary.
+        assert_eq!(
+            decide(20_000 * GRT, 7_500 * GRT, PENDING, 18_000 * GRT),
+            Action::Deposit(5_500 * GRT)
+        );
+    }
+
+    #[test]
+    fn leaves_a_running_thaw_alone() {
+        // Covered and already thawing: no attempt to chase the excess, which the contract would
+        // refuse anyway without resetting the 28 day timer.
+        assert_eq!(
+            decide(20_000 * GRT, 7_500 * GRT, PENDING, 10_000 * GRT),
+            Action::Nothing
+        );
+        // Even with far more idle escrow than the running thaw covers.
+        assert_eq!(
+            decide(100_000 * GRT, 7_500 * GRT, PENDING, 10_000 * GRT),
+            Action::Nothing
+        );
+    }
+
+    #[test]
+    fn thaws_idle_escrow_above_the_margin() {
         let target = 10_000 * GRT;
         // Nothing is reclaimed until the balance clears target * 1.25.
-        assert_eq!(desired(12_500 * GRT, 0, target), 0);
-        assert_eq!(desired(12_999 * GRT, 0, target), 0);
+        assert_eq!(decide(12_500 * GRT, 0, 0, target), Action::Nothing);
+        assert_eq!(decide(12_999 * GRT, 0, 0, target), Action::Nothing);
         // Above the floor, only the excess over it is reclaimed.
-        assert_eq!(desired(20_000 * GRT, 0, target), 7_500 * GRT);
+        assert_eq!(
+            decide(20_000 * GRT, 0, 0, target),
+            Action::Thaw(7_500 * GRT)
+        );
     }
 
     #[test]
-    fn desired_thawing_respects_minimum_when_starting() {
+    fn respects_the_withdrawal_minimum() {
         let target = 10_000 * GRT;
         // An excess under the minimum is not worth a 28 day round trip.
-        assert_eq!(desired(12_999 * GRT, 0, target), 0);
-        assert_eq!(desired(13_000 * GRT, 0, target), 500 * GRT);
+        assert_eq!(decide(12_999 * GRT, 0, 0, target), Action::Nothing);
+        assert_eq!(decide(13_000 * GRT, 0, 0, target), Action::Thaw(500 * GRT));
     }
 
     #[test]
-    fn desired_thawing_tracks_a_running_thaw_downward() {
-        // Target climbed a rung, so the justified excess shrank. Following it down preserves the
-        // maturity timestamp; cancelling and re-thawing would forfeit the thawing period.
+    fn reclamation_disabled_only_ever_deposits() {
+        let idle = account(20_000 * GRT, 0, 0);
+        let thawing = account(20_000 * GRT, 7_500 * GRT, MATURED);
+        // No thaws started, and a matured thaw is left exactly where it is.
+        assert_eq!(super::decide(&idle, 10_000 * GRT, None), Action::Nothing);
+        assert_eq!(super::decide(&thawing, 10_000 * GRT, None), Action::Nothing);
+        // Funding still nets out the thawing amount, matching the contract's `getBalance`.
         assert_eq!(
-            desired(20_000 * GRT, 7_500 * GRT, 14_000 * GRT),
-            2_500 * GRT
+            super::decide(&thawing, 18_000 * GRT, None),
+            Action::Deposit(5_500 * GRT)
         );
-        // Below the minimum too: the threshold only gates starting a thaw.
-        assert_eq!(desired(20_000 * GRT, 7_500 * GRT, 15_900 * GRT), 125 * GRT);
-        // Excess gone entirely: cancel.
-        assert_eq!(desired(20_000 * GRT, 7_500 * GRT, 16_000 * GRT), 0);
-        assert_eq!(desired(20_000 * GRT, 7_500 * GRT, 30_000 * GRT), 0);
     }
 
     #[test]
-    fn desired_thawing_never_grows_a_running_thaw() {
-        // The contract refuses an increase that would reset the timer, so asking for one would
-        // silently do nothing. Report what the contract will actually hold instead.
-        let target = 10_000 * GRT;
-        assert_eq!(desired(40_000 * GRT, 7_500 * GRT, target), 7_500 * GRT);
+    fn skips_withdrawals_without_a_chain_timestamp() {
+        // Planning maturity against the local clock would risk reverting the whole batch, so a
+        // failed timestamp read holds the withdrawal rather than guessing.
+        let matured = account(20_000 * GRT, 7_500 * GRT, MATURED);
+        assert_eq!(
+            super::decide(&matured, 10_000 * GRT, reclaim(None)),
+            Action::Nothing
+        );
     }
 
     #[test]
-    fn deposits_and_reclaims_are_mutually_exclusive() {
-        // A receiver can never be funded and reclaimed in the same cycle: reclaiming leaves the
-        // effective balance at the floor, which is above target by construction.
+    fn thawing_never_drops_the_balance_below_target() {
+        // The floor sits above target by construction, so what remains after a thaw still covers
+        // debt. This is what lets the thaw and deposit branches stay mutually exclusive.
         for debt_grt in [0, 1, 500, 12_345, 100_000, 580_000] {
             for balance_grt in [0, 2, 1_000, 40_000, 96_384, 1_000_000] {
                 for thawing_grt in [0, 100, 20_000] {
                     let balance = balance_grt * GRT;
                     let thawing = u128::min(thawing_grt * GRT, balance);
+                    let thaw_end = if thawing > 0 { PENDING } else { 0 };
                     let target = super::next_balance(debt_grt * GRT, 0.8);
-                    let thaw = super::desired_thawing(
-                        &account(balance, thawing),
+                    let action = super::decide(
+                        &account(balance, thawing, thaw_end),
                         target,
-                        MARGIN_BPS,
-                        MIN_WITHDRAW,
+                        reclaim(Some(NOW)),
                     );
-                    let adjustment = target.saturating_sub(balance.saturating_sub(thaw));
+                    let Action::Thaw(amount) = action else {
+                        continue;
+                    };
+                    // `thaw(0)` reverts, so a thaw is never queued for nothing.
+                    assert!(amount > 0, "debt {debt_grt} balance {balance_grt}");
                     assert!(
-                        (thaw == 0) || (adjustment == 0),
-                        "debt {debt_grt} balance {balance_grt} thawing {thawing_grt}: \
-                         thaw {thaw} and adjustment {adjustment}",
+                        balance.saturating_sub(amount) >= target,
+                        "debt {debt_grt} balance {balance_grt}: \
+                         thaw {amount} leaves less than target {target}",
                     );
                 }
-            }
-        }
-    }
-
-    #[test]
-    fn desired_thawing_never_exceeds_balance() {
-        for balance_grt in [0, 2, 1_000, 96_384] {
-            for target_grt in [2, 1_000, 96_384] {
-                let balance = balance_grt * GRT;
-                let thaw = super::desired_thawing(
-                    &account(balance, 0),
-                    target_grt * GRT,
-                    MARGIN_BPS,
-                    MIN_WITHDRAW,
-                );
-                assert!(thaw <= balance, "balance {balance_grt} target {target_grt}");
             }
         }
     }

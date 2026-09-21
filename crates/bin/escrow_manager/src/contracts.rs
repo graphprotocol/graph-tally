@@ -161,26 +161,23 @@ impl Contracts {
         Ok(block.header.timestamp)
     }
 
-    /// Set each receiver's thawing amount to `tokens`, batched into one transaction.
+    /// Start thawing `tokens` for each receiver, batched into one transaction.
     ///
-    /// Uses `adjustThaw` rather than `thaw`/`cancelThaw` because it is the only variant that is
-    /// safe to call every cycle: decreasing an amount preserves the existing maturity timestamp,
-    /// increasing one is refused outright when it would reset the timer (`evenIfTimerReset` is
-    /// false), and a no-op change writes nothing. A plain `thaw` would restart the thawing period
-    /// on every call.
-    pub async fn adjust_thaw_many(
+    /// Only ever called for receivers with nothing currently thawing. `thaw` restarts the thawing
+    /// period on every call, and the contract will not grow a running thaw without resetting its
+    /// timer either, so escrow that builds up while one is in flight waits for the next.
+    pub async fn thaw_many(
         &self,
-        adjustments: impl IntoIterator<Item = (Address, u128)>,
+        thaws: impl IntoIterator<Item = (Address, u128)>,
     ) -> anyhow::Result<BlockNumber> {
-        let calls: Vec<Bytes> = adjustments
+        let calls: Vec<Bytes> = thaws
             .into_iter()
             .map(|(receiver, tokens)| {
                 self.payments_escrow
-                    .adjustThaw(
+                    .thaw(
                         *self.graph_tally_collector.address(),
                         receiver,
                         U256::from(tokens),
-                        false,
                     )
                     .calldata()
                     .clone()
@@ -200,7 +197,7 @@ impl Contracts {
 
         receipt
             .block_number
-            .ok_or_else(|| anyhow!("invalid adjust thaw receipt"))
+            .ok_or_else(|| anyhow!("invalid thaw receipt"))
     }
 
     /// Withdraw each receiver's matured thawing amount back to the payer, batched into one

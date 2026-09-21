@@ -3204,8 +3204,8 @@
         "kind": "Panel",
         "spec": {
           "id": 26,
-          "title": "Thaw Adjustments Failed",
-          "description": "Failed `adjustThaw` transactions in the selected range. These start, shrink and cancel pending withdrawals; a sustained failure means reclamation amounts are no longer tracking debt.",
+          "title": "Thaws Failed",
+          "description": "Failed `thaw` transactions in the selected range. Thaws start a reclamation; a sustained failure means idle escrow is no longer being reclaimed, which is visible as a flat Thawing line.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3222,7 +3222,7 @@
                         "name": "${datasource}"
                       },
                       "spec": {
-                        "expr": "sum(increase(escrow_adjust_thaw_err{job=~\"$job\"}[$__range]))",
+                        "expr": "sum(increase(escrow_thaw_err{job=~\"$job\"}[$__range]))",
                         "instant": true
                       },
                       "labels": {
@@ -3381,7 +3381,7 @@
         "spec": {
           "id": 28,
           "title": "Thawing Over Time",
-          "description": "Total escrow pending withdrawal. Steps up when reclamation starts on a receiver, down as amounts are tracked against growing debt, and to zero as withdrawals mature.",
+          "description": "Total escrow pending withdrawal. Steps up when reclamation starts on a receiver, down as receivers collect against a thawing balance, and to zero as withdrawals mature.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3500,7 +3500,7 @@
         "spec": {
           "id": 29,
           "title": "Reclamation In Flight",
-          "description": "Receivers with escrow pending withdrawal, one row each. Thawing is the amount due back to the payer at maturity; it is re-validated against debt every cycle, so it shrinks if debt grows and disappears if the excess does. Balance minus Thawing is what funding decisions use.",
+          "description": "Receivers with escrow pending withdrawal, one row each. Thawing is the amount due back to the payer at maturity; it is fixed when the thaw starts and is not resized, so debt growing meanwhile is answered by a deposit instead. Balance minus Thawing is what funding decisions use.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3781,7 +3781,7 @@
         "spec": {
           "id": 30,
           "title": "Reclamation Transactions",
-          "description": "Thaw adjustments start, shrink and cancel pending withdrawals and run whenever the justified amount changes; withdrawals only fire once a thaw matures, so they are expected to be rare.",
+          "description": "Thaws start a reclamation and only fire for receivers with nothing already thawing; withdrawals only fire once a thaw matures. Both are expected to be rare -- a receiver can start at most one thaw per 28 day period.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3798,8 +3798,8 @@
                         "name": "${datasource}"
                       },
                       "spec": {
-                        "expr": "sum(increase(escrow_adjust_thaw_ok{job=~\"$job\"}[1h]))",
-                        "legendFormat": "Thaw Adjust OK"
+                        "expr": "sum(increase(escrow_thaw_ok{job=~\"$job\"}[1h]))",
+                        "legendFormat": "Thaw OK"
                       },
                       "labels": {
                         "grafana.app/export-label": "prometheus-1",
@@ -3821,8 +3821,8 @@
                         "name": "${datasource}"
                       },
                       "spec": {
-                        "expr": "sum(increase(escrow_adjust_thaw_err{job=~\"$job\"}[1h]))",
-                        "legendFormat": "Thaw Adjust Errors"
+                        "expr": "sum(increase(escrow_thaw_err{job=~\"$job\"}[1h]))",
+                        "legendFormat": "Thaw Errors"
                       },
                       "labels": {
                         "grafana.app/export-label": "prometheus-1",
@@ -3998,7 +3998,7 @@
         "spec": {
           "id": 31,
           "title": "Reclamation Duration",
-          "description": "Average transaction duration for thaw adjustments and withdrawals.",
+          "description": "Average transaction duration for thaws and withdrawals.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -4015,8 +4015,8 @@
                         "name": "${datasource}"
                       },
                       "spec": {
-                        "expr": "rate(escrow_adjust_thaw_duration_sum{job=~\"$job\"}[5m]) / rate(escrow_adjust_thaw_duration_count{job=~\"$job\"}[5m])",
-                        "legendFormat": "Thaw Adjust ({{pod}})"
+                        "expr": "rate(escrow_thaw_duration_sum{job=~\"$job\"}[5m]) / rate(escrow_thaw_duration_count{job=~\"$job\"}[5m])",
+                        "legendFormat": "Thaw ({{pod}})"
                       },
                       "labels": {
                         "grafana.app/export-label": "prometheus-1",

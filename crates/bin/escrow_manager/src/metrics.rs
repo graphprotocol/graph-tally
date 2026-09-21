@@ -18,7 +18,7 @@ pub struct Metrics {
     pub thawing_count: IntGauge,
     pub loop_duration: Histogram,
     pub deposit: ResponseMetrics,
-    pub adjust_thaw: ResponseMetrics,
+    pub thaw: ResponseMetrics,
     pub withdraw: ResponseMetrics,
     // Per-receiver metrics
     pub debt_grt: GaugeVec,
@@ -72,10 +72,7 @@ impl Metrics {
             )
             .unwrap(),
             deposit: ResponseMetrics::new("escrow_deposit", "escrow deposit transaction"),
-            adjust_thaw: ResponseMetrics::new(
-                "escrow_adjust_thaw",
-                "escrow thaw adjustment transaction",
-            ),
+            thaw: ResponseMetrics::new("escrow_thaw", "escrow thaw transaction"),
             withdraw: ResponseMetrics::new("escrow_withdraw", "escrow withdrawal transaction"),
             debt_grt: register_gauge_vec!(
                 "escrow_debt_grt",

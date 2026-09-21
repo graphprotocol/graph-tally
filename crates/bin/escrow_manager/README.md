@@ -65,11 +65,25 @@ receiver with no debt has a target of 2 GRT, so it falls out of the same rule as
 end of the range.
 
 Reclaiming is not instant. It goes through the escrow contract's `thaw` and `withdraw`, so funds
-only return after the contract's thawing period — **28 days on mainnet**. The manager uses
-`adjustThaw` rather than `thaw`, which means a pending amount is tracked downward as debt grows
-while keeping its original maturity date, instead of being cancelled and restarted. In practice the
-amount withdrawn at maturity has been continuously re-validated against current debt for the whole
-period.
+only return after the contract's thawing period — **28 days on mainnet**.
+
+Each cycle a receiver gets exactly one action, decided in this order:
+
+1. **Withdraw** — a thaw has matured, so the escrow returns to the payer.
+2. **Deposit** — the balance net of anything thawing is short of the target, so top it up.
+3. **Thaw** — nothing is thawing and the balance clears `target * (1 + withdraw_margin)` by at
+   least `min_withdraw_grt`, so start reclaiming the excess.
+4. Otherwise nothing.
+
+Because the branches are exclusive, the three transaction batches share no receivers and none
+depends on another having landed first.
+
+A thaw is never resized once running: the contract cannot grow one without resetting its 28-day
+timer, so escrow that builds up meanwhile waits for the next round. Debt that grows during a thaw
+is answered by the deposit branch instead, which is why the thawing amount does not need to track
+it. The trade is that money occasionally round-trips through the payer wallet — the full thawed
+amount leaves at maturity and a deposit covers the difference — rather than being kept in place.
+That costs one deposit against the alternative of rewriting the thaw every cycle for 28 days.
 
 Two consequences worth knowing:
 
@@ -81,14 +95,15 @@ Two consequences worth knowing:
   balance cancels it outright. This is normal and needs no intervention, but it means a reclamation
   in flight is not guaranteed to complete.
 
-Funding decisions use the balance net of any pending withdrawal, matching the escrow contract's own
-`getBalance`, so coverage still holds once a withdrawal lands. A receiver is therefore never funded
-and reclaimed in the same cycle.
+Funding always uses the balance net of anything thawing, matching the escrow contract's own
+`getBalance`, so coverage holds throughout a reclamation and across the withdrawal that ends it.
 
-Setting `withdraw_enabled` back to `false` is inert: anything already thawing is left exactly as it
-is and logged as a warning each cycle, rather than being cancelled or withdrawn. To stop reclaiming
-without abandoning work in flight, leave it enabled and raise `withdraw_margin` instead — pending
-amounts then shrink or cancel through the normal path.
+Setting `withdraw_enabled` back to `false` is inert with respect to the thaw itself: anything
+already thawing is left exactly as it is and logged as a warning each cycle, rather than being
+cancelled or withdrawn. It is not free, though — that escrow stays permanently excluded from the
+effective balance and is never reclaimed, so the manager tops the account up around it. To stop
+reclaiming without stranding work in flight, leave it enabled and raise `withdraw_margin` instead,
+which prevents new thaws while letting pending ones complete.
 
 Validate with `dry_run: true` first, and watch `escrow_total_thawing_grt` and
 `escrow_thawing_count`. Given the 28-day round trip, that observation period is the only practical
@@ -194,9 +209,9 @@ curl http://localhost:9090/metrics
 | `escrow_deposit_ok` | Counter | Successful deposit transactions |
 | `escrow_deposit_err` | Counter | Failed deposit transactions |
 | `escrow_deposit_duration` | Histogram | Deposit transaction duration |
-| `escrow_adjust_thaw_ok` | Counter | Successful thaw adjustment transactions |
-| `escrow_adjust_thaw_err` | Counter | Failed thaw adjustment transactions |
-| `escrow_adjust_thaw_duration` | Histogram | Thaw adjustment transaction duration |
+| `escrow_thaw_ok` | Counter | Successful thaw transactions |
+| `escrow_thaw_err` | Counter | Failed thaw transactions |
+| `escrow_thaw_duration` | Histogram | Thaw transaction duration |
 | `escrow_withdraw_ok` | Counter | Successful withdrawal transactions |
 | `escrow_withdraw_err` | Counter | Failed withdrawal transactions |
 | `escrow_withdraw_duration` | Histogram | Withdrawal transaction duration |
