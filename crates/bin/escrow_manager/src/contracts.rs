@@ -136,18 +136,6 @@ impl Contracts {
         Ok(block_number)
     }
 
-    /// Thawing period enforced by the escrow contract before withdrawals can be executed. Set at
-    /// deployment and immutable, so it is read once at startup rather than assumed.
-    pub async fn withdraw_escrow_thawing_period(&self) -> anyhow::Result<u64> {
-        self.payments_escrow
-            .WITHDRAW_ESCROW_THAWING_PERIOD()
-            .call()
-            .await
-            .context("get withdraw escrow thawing period")?
-            .try_into()
-            .context("result out of bounds")
-    }
-
     /// Timestamp of the latest block, for planning against contract-side time checks.
     ///
     /// Block timestamps are non-decreasing, so this is a lower bound on the timestamp of whatever

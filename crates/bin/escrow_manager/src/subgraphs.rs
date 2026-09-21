@@ -76,7 +76,7 @@ pub async fn escrow_accounts(
     #[serde_as]
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
-    struct EscrowAccount_ {
+    struct EscrowAccountRow {
         #[serde_as(as = "serde_with::DisplayFromStr")]
         balance: u128,
         #[serde_as(as = "serde_with::DisplayFromStr")]
@@ -90,7 +90,7 @@ pub async fn escrow_accounts(
         id: Address,
     }
     let response = network_subgraph
-        .paginated_query::<EscrowAccount_>(query, 500)
+        .paginated_query::<EscrowAccountRow>(query, 500)
         .await;
     match response {
         Ok(accounts) => Ok(accounts

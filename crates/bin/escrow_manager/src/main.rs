@@ -67,7 +67,8 @@ async fn main() -> anyhow::Result<()> {
         config.withdraw_margin,
     );
     // Converted to basis points so every subsequent calculation on token amounts stays in integer
-    // arithmetic. `u128` GRT amounts exceed f64's exact range, and these numbers decide transactions.
+    // arithmetic. `u128` GRT amounts exceed f64's exact range, and these numbers decide
+    // transactions.
     let withdraw_margin_bps = (config.withdraw_margin * 10_000.0).round() as u128;
     let min_withdraw = config.min_withdraw_grt as u128 * GRT;
 
@@ -122,14 +123,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if config.withdraw_enabled {
-        let thawing_period = contracts
-            .withdraw_escrow_thawing_period()
-            .await
-            .context("get withdraw escrow thawing period")?;
         tracing::info!(
             withdraw_margin = config.withdraw_margin,
             min_withdraw_grt = config.min_withdraw_grt,
-            thawing_period_days = thawing_period as f64 / 86400.0,
             "escrow reclamation enabled"
         );
     } else {
@@ -267,11 +263,6 @@ async fn main() -> anyhow::Result<()> {
             .total_debt_grt
             .set(debts.values().sum::<u128>() as f64 / GRT as f64);
 
-        // Maturity is a contract-side comparison against the block timestamp, so the reference
-        // time has to come from the chain; the local clock has no defined relationship to it. A
-        // failure here skips withdrawals for the cycle rather than falling back to wall clock,
-        // since being early reverts the whole batch while being late costs nothing against a
-        // 28 day horizon.
         let chain_now = match config.withdraw_enabled {
             false => None,
             true => match contracts.latest_block_timestamp().await {
@@ -366,13 +357,20 @@ async fn main() -> anyhow::Result<()> {
             .set(total_target as f64 / GRT as f64);
 
         let total_adjustment: u128 = adjustments.iter().map(|(_, a)| a).sum();
-        tracing::info!(total_adjustment_grt = ((total_adjustment as f64) * 1e-18).ceil() as u64);
+        let total_thaw: u128 = thaws.iter().map(|(_, t)| t).sum();
+        // Withdrawals can only be guesstimated so we log the count
+        tracing::info!(
+            total_adjustment_grt = ((total_adjustment as f64) * 1e-18).ceil() as u64,
+            total_thaw_grt = ((total_thaw as f64) * 1e-18).ceil() as u64,
+            withdrawals = withdrawals.len(),
+            "cycle plan",
+        );
         metrics::METRICS
             .total_adjustment_grt
             .set(total_adjustment as f64 / GRT as f64);
-        // Tracked across all three phases so a failure in one does not skip the others, and the
-        // subgraph client is only pinned forward once. The phases share no receivers, so their
-        // order carries no meaning and a failure in one cannot corrupt another.
+
+        // Whenever a transaction lands, track the block number. We use this to pin the network
+        // subgraph snapshot so the decision algorithm does not operate on stale data.
         let mut latest_tx_block: Option<BlockNumber> = None;
 
         if !thaws.is_empty() {
@@ -405,7 +403,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        if total_adjustment > 0 {
+        if !adjustments.is_empty() {
             let adjustments = if total_adjustment <= MAX_ADJUSTMENT {
                 adjustments
             } else {
@@ -536,9 +534,6 @@ enum Action {
 ///   being chased every cycle. Debt that grows meanwhile is covered by the deposit branch, which
 ///   is why the reclaimed amount need not be re-validated against it.
 fn decide(account: &EscrowAccount, target: u128, reclaim: Option<Reclaim>) -> Action {
-    // `tokensThawing == 0` implies `thawEndTimestamp == 0` on chain, but the timestamp is what the
-    // contract checks, and a withdrawal that reverts takes the whole batch with it. The comparison
-    // mirrors the contract's, which is strict.
     let matured = (account.thaw_end_timestamp != 0)
         && (account.thawing > 0)
         && reclaim

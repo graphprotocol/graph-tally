@@ -57,13 +57,14 @@ pub struct Config {
     pub withdraw_enabled: bool,
     /// Headroom kept above the target balance before any escrow is reclaimed: escrow is only
     /// thawed above `target * (1 + withdraw_margin)`. This absorbs debt growth over the thawing
-    /// period and provides hysteresis against the deposit step ladder, so it should comfortably exceed the
-    /// debt growth expected for a single receiver over that period. Must be in the range [0, 1].
+    /// period and provides hysteresis against the deposit step ladder, so it should comfortably
+    /// exceed the debt growth expected for a single receiver over that period. Must be in the
+    /// range [0, 1].
     #[serde(default = "default_withdraw_margin")]
     pub withdraw_margin: f64,
     /// Minimum excess, in whole GRT, required to start thawing a receiver's escrow. Excess below
-    /// this is left alone. Once a receiver is already thawing, the amount tracks the excess down
-    /// past this threshold rather than being cancelled, so a shrinking excess keeps its timer.
+    /// this is left alone, since reclaiming it is not worth the thawing period. It gates starting a
+    /// thaw only: a thaw already running is never resized, so the threshold is not reapplied to it.
     #[serde(default = "default_min_withdraw_grt")]
     pub min_withdraw_grt: u64,
 }
