@@ -39,6 +39,8 @@ sol!(
 use GraphTallyCollector::{GraphTallyCollectorErrors, GraphTallyCollectorInstance};
 
 pub struct Contracts {
+    /// Held directly for chain-level calls that belong to no particular contract.
+    provider: DynProvider,
     payments_escrow: PaymentsEscrowInstance<DynProvider>,
     graph_tally_collector: GraphTallyCollectorInstance<DynProvider>,
     token: ERC20Instance<DynProvider>,
@@ -64,6 +66,7 @@ impl Contracts {
             GraphTallyCollectorInstance::new(graph_tally_collector, provider.clone());
         let token = ERC20Instance::new(token, provider.clone());
         Self {
+            provider,
             payments_escrow,
             graph_tally_collector,
             token,
@@ -152,8 +155,7 @@ impl Contracts {
     /// block a transaction sent now lands in. Planning against it can only be conservative.
     pub async fn latest_block_timestamp(&self) -> anyhow::Result<u64> {
         let block = self
-            .payments_escrow
-            .provider()
+            .provider
             .get_block(BlockId::latest())
             .await
             .context("get latest block")?
@@ -237,12 +239,7 @@ impl Contracts {
     }
 
     pub async fn authorize_signer(&self, signer: &PrivateKeySigner) -> anyhow::Result<()> {
-        let chain_id = self
-            .graph_tally_collector
-            .provider()
-            .get_chain_id()
-            .await
-            .context("get chain ID")?;
+        let chain_id = self.provider.get_chain_id().await.context("get chain ID")?;
         let deadline_offset_s = 60;
         let deadline = U256::from(
             SystemTime::now()

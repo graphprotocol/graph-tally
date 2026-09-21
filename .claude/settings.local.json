@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(grep:*)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 *)",
+      "Bash(cargo test *)",
+      "Bash(cargo clippy *)",
+      "Bash(cargo fmt *)",
+      "Bash(ocr delegate *)",
+      "Read(//Users/tomi/git/thegraph/skills/skills/pr-description/**)",
+      "Bash(gh pr *)"
+    ]
+  }
+}
