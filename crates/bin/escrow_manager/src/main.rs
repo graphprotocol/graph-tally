@@ -268,7 +268,15 @@ async fn main() -> anyhow::Result<()> {
             .total_debt_grt
             .set(debts.values().sum::<u128>() as f64 / GRT as f64);
 
-        let chain_now = match config.withdraw_enabled {
+        // Ensure we can trust the debt snapshot
+        let reclaim_enabled = config.withdraw_enabled && debt_ready(&debts);
+        if config.withdraw_enabled && !reclaim_enabled {
+            tracing::warn!(
+                "no debt recorded for any receiver, skipping reclamation this cycle for safety"
+            );
+        }
+
+        let chain_now = match reclaim_enabled {
             false => None,
             true => match contracts.latest_block_timestamp().await {
                 Ok(timestamp) => Some(timestamp),
@@ -279,7 +287,7 @@ async fn main() -> anyhow::Result<()> {
             },
         };
 
-        let reclaim = config.withdraw_enabled.then_some(Reclaim {
+        let reclaim = reclaim_enabled.then_some(Reclaim {
             chain_now,
             margin_bps: withdraw_margin_bps,
             min_withdraw,
@@ -522,6 +530,15 @@ enum Action {
     Thaw(u128),
 }
 
+/// Whether this cycle's debt picture can be trusted for reclamation decisions.
+///
+/// Debt comes from Kafka consumers that publish an eventually consistent snapshot over a watch
+/// channel, with no readiness signal: an empty table means "nothing loaded yet" and "nothing is
+/// owed" alike, and the reader cannot tell them apart.
+fn debt_ready(debts: &BTreeMap<Address, u128>) -> bool {
+    debts.values().any(|debt| *debt > 0)
+}
+
 /// Decide the single action to take for a receiver this cycle.
 ///
 /// Exactly one action applies, which is what keeps the three transaction batches independent: no
@@ -605,6 +622,10 @@ async fn handle_metrics() -> impl axum::response::IntoResponse {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use alloy::primitives::Address;
+
     use super::{Action, EscrowAccount, Reclaim, GRT, MIN_DEPOSIT};
 
     const MARGIN_BPS: u128 = 2_500;
@@ -704,6 +725,24 @@ mod tests {
         // An excess under the minimum is not worth a 28 day round trip.
         assert_eq!(decide(12_999 * GRT, 0, 0, target), Action::Nothing);
         assert_eq!(decide(13_000 * GRT, 0, 0, target), Action::Thaw(500 * GRT));
+    }
+
+    #[test]
+    fn debt_ready_needs_one_receiver_with_debt() {
+        let debts = |values: &[u128]| -> BTreeMap<Address, u128> {
+            values
+                .iter()
+                .enumerate()
+                .map(|(i, debt)| (Address::repeat_byte(i as u8), *debt))
+                .collect()
+        };
+        // Cold start: the consumers have published nothing, or nothing but zeroes.
+        assert!(!super::debt_ready(&debts(&[])));
+        assert!(!super::debt_ready(&debts(&[0, 0, 0])));
+        // A single receiver with debt is enough to show the consumers have caught up. It does not
+        // prove the picture is complete, only that it is no longer empty.
+        assert!(super::debt_ready(&debts(&[0, 0, 1])));
+        assert!(super::debt_ready(&debts(&[5_000 * GRT])));
     }
 
     #[test]
