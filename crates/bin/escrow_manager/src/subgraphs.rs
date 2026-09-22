@@ -36,10 +36,23 @@ pub async fn authorized_signers(
     Ok(signers)
 }
 
+/// Escrow account state for a single receiver.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct EscrowAccount {
+    /// Total escrow balance. Thawing does not reduce this; only withdrawing and collecting do.
+    pub balance: u128,
+    /// Amount currently thawing. Still collectable by the receiver, but committed to leaving.
+    pub thawing: u128,
+    /// Unix timestamp at which the thawing amount becomes withdrawable, or 0 if not thawing.
+    pub thaw_end_timestamp: u64,
+}
+
+/// Escrow accounts held by `payer` under `collector`, keyed by receiver.
 pub async fn escrow_accounts(
     network_subgraph: &mut SubgraphClient,
     payer: &Address,
-) -> anyhow::Result<HashMap<Address, u128>> {
+    collector: &Address,
+) -> anyhow::Result<HashMap<Address, EscrowAccount>> {
     let query = format!(
         r#"
         paymentsEscrowAccounts(
@@ -50,10 +63,13 @@ pub async fn escrow_accounts(
             where: {{
                 id_gt: $last
                 payer: "{payer:?}"
+                collector: "{collector:?}"
             }}
         ) {{
             id
             balance
+            totalAmountThawing
+            thawEndTimestamp
             receiver {{
                 id
             }}
@@ -62,9 +78,14 @@ pub async fn escrow_accounts(
     );
     #[serde_as]
     #[derive(serde::Deserialize)]
-    struct EscrowAccount {
+    #[serde(rename_all = "camelCase")]
+    struct EscrowAccountRow {
         #[serde_as(as = "serde_with::DisplayFromStr")]
         balance: u128,
+        #[serde_as(as = "serde_with::DisplayFromStr")]
+        total_amount_thawing: u128,
+        #[serde_as(as = "serde_with::DisplayFromStr")]
+        thaw_end_timestamp: u64,
         receiver: Receiver,
     }
     #[derive(serde::Deserialize)]
@@ -72,12 +93,21 @@ pub async fn escrow_accounts(
         id: Address,
     }
     let response = network_subgraph
-        .paginated_query::<EscrowAccount>(query, 500)
+        .paginated_query::<EscrowAccountRow>(query, 500)
         .await;
     match response {
         Ok(accounts) => Ok(accounts
             .into_iter()
-            .map(|a| (a.receiver.id, a.balance))
+            .map(|a| {
+                (
+                    a.receiver.id,
+                    EscrowAccount {
+                        balance: a.balance,
+                        thawing: a.total_amount_thawing,
+                        thaw_end_timestamp: a.thaw_end_timestamp,
+                    },
+                )
+            })
             .collect()),
         Err(PaginatedQueryError::EmptyResponse) => Ok(Default::default()),
         Err(err) => Err(anyhow!(err)),

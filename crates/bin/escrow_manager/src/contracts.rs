@@ -1,6 +1,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use alloy::{
+    eips::BlockId,
     network::EthereumWallet,
     primitives::{keccak256, Address, BlockNumber, Bytes, U256},
     providers::{DynProvider, Provider as _, ProviderBuilder, WalletProvider},
@@ -38,6 +39,7 @@ sol!(
 use GraphTallyCollector::{GraphTallyCollectorErrors, GraphTallyCollectorInstance};
 
 pub struct Contracts {
+    provider: DynProvider,
     payments_escrow: PaymentsEscrowInstance<DynProvider>,
     graph_tally_collector: GraphTallyCollectorInstance<DynProvider>,
     token: ERC20Instance<DynProvider>,
@@ -63,6 +65,7 @@ impl Contracts {
             GraphTallyCollectorInstance::new(graph_tally_collector, provider.clone());
         let token = ERC20Instance::new(token, provider.clone());
         Self {
+            provider,
             payments_escrow,
             graph_tally_collector,
             token,
@@ -72,6 +75,13 @@ impl Contracts {
 
     pub fn payer(&self) -> Address {
         self.payer
+    }
+
+    /// Collector every escrow call in this module targets. Escrow accounts are scoped by
+    /// `(payer, collector, receiver)`, so anything reading account state has to filter on this
+    /// exact address or it will plan against a different collector's balances.
+    pub fn collector(&self) -> Address {
+        *self.graph_tally_collector.address()
     }
 
     pub async fn allowance(&self) -> anyhow::Result<u128> {
@@ -133,13 +143,97 @@ impl Contracts {
         Ok(block_number)
     }
 
-    pub async fn authorize_signer(&self, signer: &PrivateKeySigner) -> anyhow::Result<()> {
-        let chain_id = self
-            .graph_tally_collector
-            .provider()
-            .get_chain_id()
+    /// Timestamp of the latest block, for planning against contract-side time checks.
+    ///
+    /// Block timestamps are non-decreasing, so this is a lower bound on the timestamp of whatever
+    /// block a transaction sent now lands in. Planning against it can only be conservative.
+    pub async fn latest_block_timestamp(&self) -> anyhow::Result<u64> {
+        let block = self
+            .provider
+            .get_block(BlockId::latest())
             .await
-            .context("get chain ID")?;
+            .context("get latest block")?
+            .ok_or_else(|| anyhow!("no latest block"))?;
+        Ok(block.header.timestamp)
+    }
+
+    /// Start thawing `tokens` for each receiver, batched into one transaction.
+    ///
+    /// Only ever called for receivers with nothing currently thawing. `thaw` restarts the thawing
+    /// period on every call, and the contract will not grow a running thaw without resetting its
+    /// timer either, so escrow that builds up while one is in flight waits for the next.
+    pub async fn thaw_many(
+        &self,
+        thaws: impl IntoIterator<Item = (Address, u128)>,
+    ) -> anyhow::Result<BlockNumber> {
+        let calls: Vec<Bytes> = thaws
+            .into_iter()
+            .map(|(receiver, tokens)| {
+                self.payments_escrow
+                    .thaw(
+                        *self.graph_tally_collector.address(),
+                        receiver,
+                        U256::from(tokens),
+                    )
+                    .calldata()
+                    .clone()
+            })
+            .collect();
+
+        let receipt = self
+            .payments_escrow
+            .multicall(calls)
+            .send()
+            .await
+            .map_err(decoded_err::<PaymentsEscrowErrors>)?
+            .with_timeout(Some(Duration::from_secs(30)))
+            .with_required_confirmations(1)
+            .get_receipt()
+            .await?;
+
+        receipt
+            .block_number
+            .ok_or_else(|| anyhow!("invalid thaw receipt"))
+    }
+
+    /// Withdraw each receiver's matured thawing amount back to the payer, batched into one
+    /// transaction.
+    ///
+    /// The contract requires the maturity timestamp to be strictly in the past and reverts with
+    /// `PaymentsEscrowStillThawing` otherwise, which in a multicall fails the whole batch. Callers
+    /// must only include receivers whose thaw has definitely matured.
+    pub async fn withdraw_many(
+        &self,
+        receivers: impl IntoIterator<Item = Address>,
+    ) -> anyhow::Result<BlockNumber> {
+        let calls: Vec<Bytes> = receivers
+            .into_iter()
+            .map(|receiver| {
+                self.payments_escrow
+                    .withdraw(*self.graph_tally_collector.address(), receiver)
+                    .calldata()
+                    .clone()
+            })
+            .collect();
+
+        let receipt = self
+            .payments_escrow
+            .multicall(calls)
+            .send()
+            .await
+            .map_err(decoded_err::<PaymentsEscrowErrors>)?
+            .with_timeout(Some(Duration::from_secs(30)))
+            .with_required_confirmations(1)
+            .get_receipt()
+            .await?;
+
+        receipt
+            .block_number
+            .ok_or_else(|| anyhow!("invalid withdraw receipt"))
+    }
+
+    pub async fn authorize_signer(&self, signer: &PrivateKeySigner) -> anyhow::Result<()> {
+        let chain_id = self.provider.get_chain_id().await.context("get chain ID")?;
         let deadline_offset_s = 60;
         let deadline = U256::from(
             SystemTime::now()

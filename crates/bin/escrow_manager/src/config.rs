@@ -49,6 +49,24 @@ pub struct Config {
     /// Must be in the range (0, 1].
     #[serde(default = "default_balance_fill_factor")]
     pub balance_fill_factor: f64,
+    /// Reclaim escrow that sits above a receiver's target balance. When disabled the manager only
+    /// ever deposits, and a receiver's balance is a high-water mark of its past debt. Reclaiming
+    /// takes effect via `thaw` and `withdraw`, so funds only return after the escrow contract's
+    /// thawing period (28 days on mainnet) has elapsed.
+    #[serde(default)]
+    pub withdraw_enabled: bool,
+    /// Headroom kept above the target balance before any escrow is reclaimed: escrow is only
+    /// thawed above `target * (1 + withdraw_margin)`. This absorbs debt growth over the thawing
+    /// period and provides hysteresis against the deposit step ladder, so it should comfortably
+    /// exceed the debt growth expected for a single receiver over that period. Must be in the
+    /// range [0, 1].
+    #[serde(default = "default_withdraw_margin")]
+    pub withdraw_margin: f64,
+    /// Minimum excess, in whole GRT, required to start thawing a receiver's escrow. Excess below
+    /// this is left alone, since reclaiming it is not worth the thawing period. It gates starting a
+    /// thaw only: a thaw already running is never resized, so the threshold is not reapplied to it.
+    #[serde(default = "default_min_withdraw_grt")]
+    pub min_withdraw_grt: u64,
 }
 
 fn default_port_metrics() -> u16 {
@@ -57,6 +75,14 @@ fn default_port_metrics() -> u16 {
 
 fn default_balance_fill_factor() -> f64 {
     0.8
+}
+
+fn default_withdraw_margin() -> f64 {
+    0.25
+}
+
+fn default_min_withdraw_grt() -> u64 {
+    500
 }
 
 #[derive(Debug, Deserialize)]
