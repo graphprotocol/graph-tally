@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_escrow_manager-v2.1.0...graph_tally_escrow_manager-v2.2.0) (2026-09-22)
+
+
+### Features
+
+* **escrow_manager:** reclaim idle escrow via thaw and withdraw ([#21](https://github.com/graphprotocol/graph-tally/issues/21)) ([1301e9a](https://github.com/graphprotocol/graph-tally/commit/1301e9a69a2861efd08b541f5e5cb58071bcf47f))
+
 ## [2.1.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_escrow_manager-v2.0.0...graph_tally_escrow_manager-v2.1.0) (2026-09-16)
 
 
