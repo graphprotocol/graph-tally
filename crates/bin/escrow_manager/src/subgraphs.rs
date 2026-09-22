@@ -47,9 +47,16 @@ pub struct EscrowAccount {
     pub thaw_end_timestamp: u64,
 }
 
+/// Escrow accounts held by `payer` under `collector`, keyed by receiver.
+///
+/// Accounts are scoped by `(payer, collector, receiver)` on both the contract and the subgraph, so
+/// the collector filter is load-bearing rather than an optimisation: without it the payer's
+/// accounts under every other collector come back too, and collapsing to a receiver-keyed map
+/// would let one of them silently displace the account the transactions actually target.
 pub async fn escrow_accounts(
     network_subgraph: &mut SubgraphClient,
     payer: &Address,
+    collector: &Address,
 ) -> anyhow::Result<HashMap<Address, EscrowAccount>> {
     let query = format!(
         r#"
@@ -61,6 +68,7 @@ pub async fn escrow_accounts(
             where: {{
                 id_gt: $last
                 payer: "{payer:?}"
+                collector: "{collector:?}"
             }}
         ) {{
             id

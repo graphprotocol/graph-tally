@@ -77,6 +77,13 @@ impl Contracts {
         self.payer
     }
 
+    /// Collector every escrow call in this module targets. Escrow accounts are scoped by
+    /// `(payer, collector, receiver)`, so anything reading account state has to filter on this
+    /// exact address or it will plan against a different collector's balances.
+    pub fn collector(&self) -> Address {
+        *self.graph_tally_collector.address()
+    }
+
     pub async fn allowance(&self) -> anyhow::Result<u128> {
         self.token
             .allowance(self.payer(), *self.payments_escrow.address())

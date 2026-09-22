@@ -194,7 +194,12 @@ async fn main() -> anyhow::Result<()> {
             }
         };
         let mut receivers: BTreeSet<Address> = allocations.iter().map(|a| a.indexer).collect();
-        let escrow_accounts = match escrow_accounts(&mut network_subgraph, &contracts.payer()).await
+        let escrow_accounts = match escrow_accounts(
+            &mut network_subgraph,
+            &contracts.payer(),
+            &contracts.collector(),
+        )
+        .await
         {
             Ok(escrow_accounts) => escrow_accounts,
             Err(escrow_accounts_err) => {
