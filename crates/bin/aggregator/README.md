@@ -23,7 +23,7 @@ As described in the [gateway README section on Graph Tally](https://github.com/e
 A JSON-RPC service for Graph Tally that lets clients request an aggregate receipt from a list of
 individual receipts.
 
-Usage: graph_tally_aggregator [OPTIONS] --private-key <PRIVATE_KEY>
+Usage: graph_tally_aggregator [OPTIONS]
 
 Options:
       --port <PORT>
@@ -105,8 +105,11 @@ Use `GRAPH_TALLY_SIGNERS` with one entry. There is no separate single-payer mode
 what lets receipts for any *other* payer be refused, and a key on its own cannot say which payer it
 belongs to.
 
-`GRAPH_TALLY_PRIVATE_KEY` and `GRAPH_TALLY_PUBLIC_KEYS` were removed. Setting either fails at startup
-with the replacement to use. To find the payer for an existing key, read the `authorizer` field of
+`GRAPH_TALLY_PRIVATE_KEY` and `GRAPH_TALLY_PUBLIC_KEYS` were removed. Nothing reads them any more, so
+a deployment that still sets them starts normally and ignores them -- remove them from the manifest
+rather than relying on an error. Startup fails only if `GRAPH_TALLY_SIGNERS` is unset.
+
+To find the payer for an existing key, read the `authorizer` field of
 `GraphTallyCollector.authorizations(<that key's address>)`, or take it from the escrow manager's
 `payer = 0x…` startup line.
 
