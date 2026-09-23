@@ -5,3 +5,4 @@ pub mod grpc;
 pub mod jsonrpsee_helpers;
 pub mod metrics;
 pub mod server;
+pub mod signers;

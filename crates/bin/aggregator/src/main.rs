@@ -1,10 +1,10 @@
 #![doc = include_str!("../README.md")]
 
-use std::{collections::HashSet, str::FromStr, time::Duration};
+use std::{sync::Arc, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use clap::Parser;
-use graph_tally_aggregator::{metrics, server};
+use graph_tally_aggregator::{metrics, server, signers, signers::SignerRegistry};
 use graph_tally_core::graph_tally_eip712_domain;
 use log::{debug, info};
 use thegraph_core::alloy::{
@@ -19,17 +19,22 @@ struct Args {
     #[arg(long, default_value_t = 8080, env = "GRAPH_TALLY_PORT")]
     port: u16,
 
-    /// Signer private key for signing Receipt Aggregate Vouchers, as a hex string.
-    #[arg(long, env = "GRAPH_TALLY_PRIVATE_KEY")]
-    private_key: String,
+    /// Signing key per payer, as `;`-separated `<payer address>=<signer private key>` entries.
+    ///
+    /// The key is a signer authorized on chain for that payer, not the payer's own key. A RAV
+    /// carries the payer named in the receipts it aggregates, and the collector requires the
+    /// RAV's signer to be authorized for that payer -- so each payer served needs its own key.
+    #[arg(long, env = "GRAPH_TALLY_SIGNERS")]
+    signers: Option<String>,
 
-    /// Signer public keys. Not the counterpart of the signer private key. Signers that are allowed
-    /// for the incoming receipts / RAV to aggregate. Useful when needing to accept receipts that
-    /// were signed with a different key (e.g. a recent key rotation, or receipts coming from a
-    /// different gateway / aggregator that use a different signing key).
-    /// Expects a comma-separated list of Ethereum addresses.
-    #[arg(long, env = "GRAPH_TALLY_PUBLIC_KEYS")]
-    public_keys: Option<Vec<Address>>,
+    /// Additional accepted receipt signers per payer, as `;`-separated
+    /// `<payer address>=<signer address>` entries. Repeat a payer to list several.
+    ///
+    /// Each payer's own signing key is already accepted and need not be listed. Every address
+    /// listed here must be authorized for the payer it is listed under -- a signer accepted
+    /// for one payer does not vouch for another's receipts.
+    #[arg(long, env = "GRAPH_TALLY_ACCEPTED_SIGNERS")]
+    accepted_signers: Option<String>,
 
     /// Maximum request body size in bytes.
     /// Defaults to 10MB.
@@ -74,8 +79,8 @@ impl std::fmt::Debug for Args {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Args")
             .field("port", &self.port)
-            .field("public_keys", &self.public_keys)
-            .field("private_key", &"[REDACTED]")
+            .field("signers", &"[REDACTED]")
+            .field("accepted_signers", &self.accepted_signers)
             .field("max_request_body_size", &self.max_request_body_size)
             .field("max_response_body_size", &self.max_response_body_size)
             .field("max_connections", &self.max_connections)
@@ -104,20 +109,25 @@ async fn main() -> Result<()> {
     // We just let it gracelessly get killed at the end of main()
     tokio::spawn(metrics::run_server(args.metrics_port));
 
-    // Create a wallet from the mnemonic.
-    let wallet = PrivateKeySigner::from_str(&args.private_key)?;
-
-    info!("Wallet address: {:#40x}", wallet.address());
+    let signers = Arc::new(signer_registry(
+        // The payer is the piece an older single-key config never recorded, so say where to
+        // find it rather than leaving the reader to work out which payer their key serves.
+        args.signers.as_deref().context(
+            "GRAPH_TALLY_SIGNERS is required: `;`-separated `<payer address>=<signer private \
+             key>` entries. The payer for an existing signing key is the `authorizer` returned \
+             by GraphTallyCollector.authorizations(<that key's address>).",
+        )?,
+        args.accepted_signers.as_deref(),
+    )?);
+    // Logged per payer because a signer bound to the wrong payer produces RAVs that are
+    // rejected downstream with nothing in this process's logs to say why.
+    for (payer, signer, accepted) in signers.summary() {
+        info!("payer {payer:#40x} signs with {signer:#40x}");
+        info!("  accepted receipt signers: {accepted:?}");
+    }
 
     // Create the EIP-712 domain separator.
     let domain_separator = create_eip712_domain(&args)?;
-
-    // Create HashSet of *all* allowed signers
-    let mut accepted_addresses: HashSet<Address> = std::collections::HashSet::new();
-    accepted_addresses.insert(wallet.address().0.into());
-    if let Some(public_keys) = &args.public_keys {
-        accepted_addresses.extend(public_keys.iter().cloned());
-    }
 
     let kafka = match args.kafka_config {
         None => None,
@@ -134,8 +144,7 @@ async fn main() -> Result<()> {
     // This await is non-blocking
     let (handle, _) = server::run_server(
         args.port,
-        wallet,
-        accepted_addresses,
+        signers,
         domain_separator,
         args.max_request_body_size,
         args.max_response_body_size,
@@ -151,6 +160,47 @@ async fn main() -> Result<()> {
     // If we're here, we've received a signal to exit.
     info!("Shutting down...");
     Ok(())
+}
+
+/// Split `;`-separated `key=value` pairs, as `--kafka-config` does.
+fn pairs(raw: &str) -> impl Iterator<Item = (&str, &str)> {
+    raw.split(';')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .filter_map(|entry| entry.split_once('='))
+        .map(|(key, value)| (key.trim(), value.trim()))
+}
+
+/// Parse `--signers` / `--accepted-signers` into a [`SignerRegistry`].
+fn signer_registry(signers: &str, accepted_signers: Option<&str>) -> Result<SignerRegistry> {
+    let signing_keys = pairs(signers)
+        .map(|(payer, key)| {
+            let payer: Address = payer
+                .parse()
+                .with_context(|| format!("GRAPH_TALLY_SIGNERS: parse payer address {payer:?}"))?;
+            let key: PrivateKeySigner = key
+                .parse()
+                .with_context(|| format!("GRAPH_TALLY_SIGNERS: parse signing key for {payer}"))?;
+            Ok((payer, key))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let accepted = accepted_signers
+        .map(pairs)
+        .into_iter()
+        .flatten()
+        .map(|(payer, signer)| {
+            let payer: Address = payer.parse().with_context(|| {
+                format!("GRAPH_TALLY_ACCEPTED_SIGNERS: parse payer address {payer:?}")
+            })?;
+            let signer: Address = signer.parse().with_context(|| {
+                format!("GRAPH_TALLY_ACCEPTED_SIGNERS: parse signer address for {payer}")
+            })?;
+            Ok((payer, signer))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    signers::build(signing_keys, accepted).context("GRAPH_TALLY_SIGNERS")
 }
 
 /// Creates the Graph Tally EIP-712 domain separator based on the provided arguments

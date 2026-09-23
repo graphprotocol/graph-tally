@@ -1,9 +1,10 @@
-use std::{collections::HashSet, str::FromStr, time::Duration};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 
 use graph_tally_aggregator::{
     grpc::graph_tally::{graph_tally_aggregator_client::GraphTallyAggregatorClient, RavRequest},
     jsonrpsee_helpers::JsonRpcResponse,
     server,
+    signers::{PayerKeys, SignerRegistry},
 };
 use graph_tally_core::{graph_tally_eip712_domain, signed_message::Eip712SignedMessage};
 use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
@@ -19,17 +20,19 @@ async fn aggregation_test() {
     let domain_separator = graph_tally_eip712_domain(1, Address::ZERO);
 
     let wallet = PrivateKeySigner::random();
+    // The registry is keyed by payer, so it has to be known before the server starts.
+    let payer = Address::from_str("0xabababababababababababababababababababab").unwrap();
 
     let max_request_body_size = 1024 * 100;
     let max_response_body_size = 1024 * 100;
     let max_concurrent_connections = 1;
 
-    let accepted_addresses = HashSet::from([wallet.address()]);
-
     let (join_handle, local_addr) = server::run_server(
         0,
-        wallet.clone(),
-        accepted_addresses,
+        Arc::new(SignerRegistry::new(HashMap::from([(
+            payer,
+            PayerKeys::new(wallet.clone(), []),
+        )]))),
         domain_separator.clone(),
         max_request_body_size,
         max_response_body_size,
@@ -48,7 +51,6 @@ async fn aggregation_test() {
         .send_compressed(CompressionEncoding::Zstd);
 
     let collection_id = FixedBytes::from([0xab; 32]);
-    let payer = Address::from_str("0xabababababababababababababababababababab").unwrap();
     let data_service = Address::from_str("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead").unwrap();
     let service_provider = Address::from_str("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef").unwrap();
 
