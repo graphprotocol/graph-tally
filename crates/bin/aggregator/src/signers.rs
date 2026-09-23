@@ -69,18 +69,17 @@ impl SignerRegistry {
 }
 
 /// Build a registry from already-parsed `(payer, signing key)` and `(payer, accepted signer)`
-/// pairs. Enforces what the chain enforces, so a config that could never work on chain is
-/// refused here rather than at collect time.
+/// pairs. A signer is bound to exactly one authorizer on chain, so an address may appear under
+/// one payer only, whichever way it arrives.
 pub fn build(
     signing_keys: impl IntoIterator<Item = (Address, PrivateKeySigner)>,
     accepted: impl IntoIterator<Item = (Address, Address)>,
 ) -> anyhow::Result<SignerRegistry> {
     let mut payers: HashMap<Address, PayerKeys> = HashMap::new();
-    let mut keys_seen: HashMap<Address, Address> = HashMap::new();
+    // Every signer address seen so far and the payer it belongs to
+    let mut signer_payer: HashMap<Address, Address> = HashMap::new();
     for (payer, signing_key) in signing_keys {
-        // A signer is bound to exactly one authorizer on chain, so one key listed for two
-        // payers cannot be authorized for both.
-        if let Some(other) = keys_seen.insert(signing_key.address(), payer) {
+        if let Some(other) = signer_payer.insert(signing_key.address(), payer) {
             bail!(
                 "signing key {} is listed for both {other} and {payer}, but a signer can only \
                  be authorized for one payer",
@@ -99,13 +98,18 @@ pub fn build(
     }
 
     for (payer, accepted) in accepted {
-        payers
-            .get_mut(&payer)
-            .ok_or_else(|| {
-                anyhow!("accepted signer {accepted} names payer {payer}, which has no signing key")
-            })?
-            .accepted_signers
-            .insert(accepted);
+        let keys = payers.get_mut(&payer).ok_or_else(|| {
+            anyhow!("accepted signer {accepted} names payer {payer}, which has no signing key")
+        })?;
+        if let Some(other) = signer_payer.insert(accepted, payer) {
+            if other != payer {
+                bail!(
+                    "signer {accepted} is listed for both {other} and {payer}, but a signer can \
+                     only be authorized for one payer"
+                );
+            }
+        }
+        keys.accepted_signers.insert(accepted);
     }
 
     Ok(SignerRegistry::new(payers))
@@ -172,6 +176,35 @@ mod tests {
         .unwrap();
         let (_, accepted) = registry.resolve(payer(1)).unwrap();
         assert_eq!(accepted.len(), 3); // own signer + two listed
+    }
+
+    #[test]
+    fn an_accepted_signer_cannot_be_shared_across_payers() {
+        let shared = payer(9);
+        // Accepting one address for two payers is a config the chain cannot honour, and it
+        // would let receipts signed by a key authorized elsewhere draw on the other's escrow.
+        assert!(build(
+            [(payer(1), key(1)), (payer(2), key(2))],
+            [(payer(1), shared), (payer(2), shared)],
+        )
+        .is_err());
+        // Same, when the shared address is another payer's signing key.
+        let a_key = key(1);
+        assert!(build(
+            [(payer(1), a_key.clone()), (payer(2), key(2))],
+            [(payer(2), a_key.address())],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn repeating_a_signer_for_its_own_payer_is_allowed() {
+        let extra = payer(9);
+        // Listing the same pair twice is idempotent, not a conflict.
+        assert!(build([(payer(1), key(1))], [(payer(1), extra), (payer(1), extra)]).is_ok());
+        // Nor is redundantly listing a payer's own signing key, which is accepted anyway.
+        let a_key = key(1);
+        assert!(build([(payer(1), a_key.clone())], [(payer(1), a_key.address())]).is_ok());
     }
 
     #[test]
