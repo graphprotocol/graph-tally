@@ -2,7 +2,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Context as _, Result};
+use anyhow::{anyhow, Context as _, Result};
 use clap::Parser;
 use graph_tally_aggregator::{metrics, server, signers, signers::SignerRegistry};
 use graph_tally_core::graph_tally_eip712_domain;
@@ -163,17 +163,30 @@ async fn main() -> Result<()> {
 }
 
 /// Split `;`-separated `key=value` pairs, as `--kafka-config` does.
-fn pairs(raw: &str) -> impl Iterator<Item = (&str, &str)> {
+///
+/// A segment with no `=` is an error rather than a skip. Dropping one would leave a payer
+/// unserved or a signer unaccepted, and neither shows up until a request arrives and is
+/// refused -- by which point the failure is the indexer's, not the operator's.
+///
+/// Empty segments are still ignored, so a trailing or doubled `;` stays valid.
+fn pairs(raw: &str) -> Result<Vec<(&str, &str)>> {
     raw.split(';')
         .map(str::trim)
         .filter(|entry| !entry.is_empty())
-        .filter_map(|entry| entry.split_once('='))
-        .map(|(key, value)| (key.trim(), value.trim()))
+        .map(|entry| {
+            entry
+                .split_once('=')
+                .map(|(key, value)| (key.trim(), value.trim()))
+                .ok_or_else(|| anyhow!("malformed entry {entry:?}, expected `key=value`"))
+        })
+        .collect()
 }
 
 /// Parse `--signers` / `--accepted-signers` into a [`SignerRegistry`].
 fn signer_registry(signers: &str, accepted_signers: Option<&str>) -> Result<SignerRegistry> {
     let signing_keys = pairs(signers)
+        .context("GRAPH_TALLY_SIGNERS")?
+        .into_iter()
         .map(|(payer, key)| {
             let payer: Address = payer
                 .parse()
@@ -187,8 +200,10 @@ fn signer_registry(signers: &str, accepted_signers: Option<&str>) -> Result<Sign
 
     let accepted = accepted_signers
         .map(pairs)
+        .transpose()
+        .context("GRAPH_TALLY_ACCEPTED_SIGNERS")?
+        .unwrap_or_default()
         .into_iter()
-        .flatten()
         .map(|(payer, signer)| {
             let payer: Address = payer.parse().with_context(|| {
                 format!("GRAPH_TALLY_ACCEPTED_SIGNERS: parse payer address {payer:?}")
@@ -221,4 +236,75 @@ fn create_eip712_domain(args: &Args) -> Result<Eip712Domain> {
         chain_id.unwrap_or(1),
         verifying_contract.unwrap_or_default(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{pairs, signer_registry};
+
+    const PAYER_A: &str = "0x1111111111111111111111111111111111111111";
+    const PAYER_B: &str = "0x2222222222222222222222222222222222222222";
+    const KEY_A: &str = "0x0000000000000000000000000000000000000000000000000000000000000001";
+    const KEY_B: &str = "0x0000000000000000000000000000000000000000000000000000000000000002";
+    const SIGNER: &str = "0x3333333333333333333333333333333333333333";
+
+    #[test]
+    fn splits_pairs_and_trims() {
+        assert_eq!(pairs("a=1;b=2").unwrap(), vec![("a", "1"), ("b", "2")]);
+        assert_eq!(
+            pairs("  a = 1 ; b = 2 ").unwrap(),
+            vec![("a", "1"), ("b", "2")]
+        );
+        // Only the first `=` separates, so a value may contain one.
+        assert_eq!(pairs("a=1=2").unwrap(), vec![("a", "1=2")]);
+    }
+
+    #[test]
+    fn empty_segments_are_ignored() {
+        // Trailing and doubled separators stay valid.
+        assert_eq!(pairs("a=1;").unwrap(), vec![("a", "1")]);
+        assert_eq!(pairs("a=1;;b=2").unwrap(), vec![("a", "1"), ("b", "2")]);
+        assert_eq!(pairs(" ; ").unwrap(), vec![]);
+    }
+
+    #[test]
+    fn a_segment_without_an_equals_is_an_error() {
+        // Skipping it would drop one payer from a multi-payer config and only surface when
+        // that payer sent a request.
+        let err = pairs("a=1;oops;b=2").unwrap_err().to_string();
+        assert!(err.contains("oops"), "{err}");
+        assert!(pairs("oops").is_err());
+    }
+
+    #[test]
+    fn a_typo_in_one_signers_entry_fails_startup() {
+        let good = format!("{PAYER_A}={KEY_A};{PAYER_B}={KEY_B}");
+        assert!(signer_registry(&good, None).is_ok());
+
+        // Same config with the second `=` fat-fingered into a space.
+        let typo = format!("{PAYER_A}={KEY_A};{PAYER_B} {KEY_B}");
+        // `.err()` rather than `unwrap_err()`: the Ok type holds private keys and is
+        // deliberately not Debug.
+        let err = signer_registry(&typo, None)
+            .err()
+            .expect("malformed entry should fail");
+        assert!(
+            format!("{err:#}").contains("GRAPH_TALLY_SIGNERS"),
+            "{err:#}"
+        );
+    }
+
+    #[test]
+    fn a_typo_in_accepted_signers_fails_startup() {
+        let signers = format!("{PAYER_A}={KEY_A}");
+        assert!(signer_registry(&signers, Some(&format!("{PAYER_A}={SIGNER}"))).is_ok());
+
+        let err = signer_registry(&signers, Some(&format!("{PAYER_A} {SIGNER}")))
+            .err()
+            .expect("malformed entry should fail");
+        assert!(
+            format!("{err:#}").contains("GRAPH_TALLY_ACCEPTED_SIGNERS"),
+            "{err:#}"
+        );
+    }
 }
