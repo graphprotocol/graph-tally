@@ -2,7 +2,7 @@
 // The tests use a mock Indexer server running a Manager instance and a graph_tally_aggregator to handle RAV requests.
 // An Indexer checks and stores receipts. After receiving a specific number of receipts, the Indexer sends a RAV request to the aggregator.
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     convert::TryInto,
     net::{SocketAddr, TcpListener},
     str::FromStr,
@@ -11,7 +11,7 @@ use std::{
 };
 
 use anyhow::{Error, Result};
-use graph_tally_aggregator::{jsonrpsee_helpers, server as agg_server};
+use graph_tally_aggregator::{jsonrpsee_helpers, server as agg_server, signers::SignerRegistry};
 use graph_tally_core::{
     graph_tally_eip712_domain,
     manager::context::memory::{checks::get_full_list_of_checks, *},
@@ -882,12 +882,13 @@ async fn start_sender_aggregator(
         listener.local_addr()?.port()
     };
 
-    let accepted_addresses = HashSet::from([keys.address()]);
+    // The registry is keyed by payer, and every receipt these tests build carries the `payer`
+    // fixture, so that is the one payer this aggregator serves.
+    let signers = Arc::new(SignerRegistry::build([(payer(), keys)], []).unwrap());
 
     let (server_handle, socket_addr) = agg_server::run_server(
         http_port,
-        keys,
-        accepted_addresses,
+        signers,
         domain_separator,
         http_request_size_limit,
         http_response_size_limit,

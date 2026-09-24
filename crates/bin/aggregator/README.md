@@ -23,15 +23,17 @@ As described in the [gateway README section on Graph Tally](https://github.com/e
 A JSON-RPC service for Graph Tally that lets clients request an aggregate receipt from a list of
 individual receipts.
 
-Usage: graph_tally_aggregator [OPTIONS] --private-key <PRIVATE_KEY>
+Usage: graph_tally_aggregator [OPTIONS]
 
 Options:
       --port <PORT>
           Port to listen on for JSON-RPC requests [env: GRAPH_TALLY_PORT=] [default: 8080]
-      --private-key <PRIVATE_KEY>
-          Sender private key for signing Receipt Aggregate Vouchers, as a hex string [env: GRAPH_TALLY_PRIVATE_KEY=]
-      --public-keys <PUBLIC_KEYS>
-          Signer public keys for incoming receipts/RAVs [env: GRAPH_TALLY_PUBLIC_KEYS=]
+      --signers <SIGNERS>
+          Signing key per payer, as `;`-separated `<payer>=<signer private key>` entries
+          [env: GRAPH_TALLY_SIGNERS=]
+      --accepted-signers <ACCEPTED_SIGNERS>
+          Extra accepted receipt signers per payer, as `;`-separated `<payer>=<signer>` entries
+          [env: GRAPH_TALLY_ACCEPTED_SIGNERS=]
       --max-request-body-size <MAX_REQUEST_BODY_SIZE>
           Maximum request body size in bytes. Defaults to 10MB [env: GRAPH_TALLY_MAX_REQUEST_BODY_SIZE=] [default: 10485760]
       --max-response-body-size <MAX_RESPONSE_BODY_SIZE>
@@ -55,6 +57,61 @@ Options:
   -V, --version
           Print version
 ```
+
+## Signing keys and payers
+
+A RAV carries the `payer` named in the receipts it aggregates, and `GraphTallyCollector` recovers the
+RAV's signer and requires it to be authorized for **that** payer. A RAV signed by a key belonging to a
+different payer is rejected by indexers and uncollectable on chain.
+
+Because the collector binds each signer to exactly one authorizer, one key cannot serve two payers.
+Serving more than one payer therefore takes one signing key per payer:
+
+```sh
+GRAPH_TALLY_SIGNERS="0xPAYER_A=0xSIGNER_KEY_A;0xPAYER_B=0xSIGNER_KEY_B"
+```
+
+Left of `=` is a payer **address**; right of `=` is the private key of a **signer** authorized on chain
+for that payer. It is not the payer's own key -- that controls the escrow balance and belongs with the
+escrow manager, not with a public-facing service.
+
+The aggregator picks the signing key from the payer on the incoming receipts, and refuses requests for
+a payer it holds no key for rather than signing with whatever key is at hand.
+
+### Rotating a signer within one payer
+
+Receipts already issued under the previous signer stay valid as long as that address remains accepted
+**for its own payer**. List it explicitly, repeating the payer for several:
+
+```sh
+GRAPH_TALLY_ACCEPTED_SIGNERS="0xPAYER_A=0xOLD_SIGNER_A;0xPAYER_A=0xOLDER_SIGNER_A"
+```
+
+Each payer's own signing address is always accepted, so it need not be listed. Accepted signers are
+scoped per payer: a signer accepted for payer A does not vouch for payer B's receipts.
+
+The old signer must also stay authorized on chain until the last RAV it signed has been collected.
+Revocation is `thawSigner` → wait out `REVOKE_AUTHORIZATION_THAWING_PERIOD` → `revokeAuthorizedSigner`.
+
+### Migrating to a new payer
+
+A payer change is not a signer rotation. Keep a `GRAPH_TALLY_SIGNERS` entry for the old payer, with a
+key authorized to *it*, until every receipt issued under that payer has been aggregated and collected.
+Dropping the old entry early leaves those receipts unaggregatable.
+
+### Single-payer deployments
+
+Use `GRAPH_TALLY_SIGNERS` with one entry. There is no separate single-payer mode: naming the payer is
+what lets receipts for any *other* payer be refused, and a key on its own cannot say which payer it
+belongs to.
+
+`GRAPH_TALLY_PRIVATE_KEY` and `GRAPH_TALLY_PUBLIC_KEYS` were removed. Nothing reads them any more, so
+a deployment that still sets them starts normally and ignores them -- remove them from the manifest
+rather than relying on an error. Startup fails only if `GRAPH_TALLY_SIGNERS` is unset.
+
+To find the payer for an existing key, read the `authorizer` field of
+`GraphTallyCollector.authorizations(<that key's address>)`, or take it from the escrow manager's
+`payer = 0x…` startup line.
 
 Please refer to [GraphTallyCollector](https://github.com/graphprotocol/contracts/blob/main/packages/horizon/contracts/payments/collectors/GraphTallyCollector.sol) for more information about Receipt Aggregate Voucher signing keys.
 

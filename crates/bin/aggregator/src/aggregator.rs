@@ -1,26 +1,49 @@
 use std::collections::HashSet;
 
-use anyhow::{bail, Ok, Result};
+use anyhow::{anyhow, bail, Ok, Result};
 use graph_tally_core::{receipt::WithUniqueId, signed_message::Eip712SignedMessage};
 use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
 use rayon::prelude::*;
 use thegraph_core::alloy::{
     dyn_abi::Eip712Domain,
     primitives::{Address, FixedBytes},
-    signers::local::PrivateKeySigner,
     sol_types::SolStruct,
 };
+
+use crate::signers::SignerRegistry;
 
 pub fn check_and_aggregate_receipts(
     domain_separator: &Eip712Domain,
     receipts: &[Eip712SignedMessage<Receipt>],
     previous_rav: Option<Eip712SignedMessage<ReceiptAggregateVoucher>>,
-    wallet: &PrivateKeySigner,
-    accepted_addresses: &HashSet<Address>,
+    signers: &SignerRegistry,
 ) -> Result<Eip712SignedMessage<ReceiptAggregateVoucher>> {
     check_signatures_unique(receipts)?;
 
-    // Check that the receipts are signed by an accepted signer address
+    // Get the allocation id from the first receipt, return error if there are no receipts
+    let (collection_id, payer, data_service, service_provider) = match receipts.first() {
+        Some(receipt) => (
+            receipt.message.collection_id,
+            receipt.message.payer,
+            receipt.message.data_service,
+            receipt.message.service_provider,
+        ),
+        None => return Err(graph_tally_core::Error::NoValidReceiptsForRavRequest.into()),
+    };
+
+    // The payer is read before any signature is checked because it decides both halves of
+    // the check: which key signs the RAV, and which signers are acceptable on the way in.
+    // `check_collection_id` below proves the remaining receipts carry this same payer.
+    let (wallet, accepted_addresses) = signers.resolve(payer).ok_or_else(|| {
+        anyhow!(
+            "no signing key configured for payer {payer}; \
+             signing with another payer's key would produce an uncollectable RAV"
+        )
+    })?;
+
+    // Check that the receipts are signed by a signer accepted for *this payer*. A signer
+    // accepted for some other payer is not interchangeable: the RAV carries this payer, and
+    // the collector requires its signer to be authorized for it.
     receipts.par_iter().try_for_each(|receipt| {
         check_signature_is_from_one_of_addresses(receipt, domain_separator, accepted_addresses)
     })?;
@@ -36,17 +59,6 @@ pub fn check_and_aggregate_receipts(
 
     // Check that the receipts timestamp is greater than the previous rav
     check_receipt_timestamps(receipts, previous_rav.as_ref())?;
-
-    // Get the allocation id from the first receipt, return error if there are no receipts
-    let (collection_id, payer, data_service, service_provider) = match receipts.first() {
-        Some(receipt) => (
-            receipt.message.collection_id,
-            receipt.message.payer,
-            receipt.message.data_service,
-            receipt.message.service_provider,
-        ),
-        None => return Err(graph_tally_core::Error::NoValidReceiptsForRavRequest.into()),
-    };
 
     // Check that the receipts all have the same collection id
     check_collection_id(
@@ -193,6 +205,8 @@ mod tests {
         signers::local::PrivateKeySigner,
     };
 
+    use crate::signers::SignerRegistry;
+
     #[fixture]
     fn keys() -> (PrivateKeySigner, Address) {
         let wallet = PrivateKeySigner::random();
@@ -227,6 +241,126 @@ mod tests {
     #[fixture]
     fn domain_separator() -> Eip712Domain {
         graph_tally_eip712_domain(1, Address::from([0x11u8; 20]))
+    }
+
+    /// Two payers, each with its own signing key -- the shape that a payer migration needs.
+    fn two_payer_registry(
+        payer_a: Address,
+        signer_a: &PrivateKeySigner,
+        payer_b: Address,
+        signer_b: &PrivateKeySigner,
+    ) -> SignerRegistry {
+        SignerRegistry::build(
+            [(payer_a, signer_a.clone()), (payer_b, signer_b.clone())],
+            [],
+        )
+        .unwrap()
+    }
+
+    fn receipt_for(
+        domain_separator: &Eip712Domain,
+        payer: Address,
+        signer: &PrivateKeySigner,
+        value: u128,
+    ) -> Eip712SignedMessage<Receipt> {
+        Eip712SignedMessage::new(
+            domain_separator,
+            Receipt::new(
+                collection_id(),
+                payer,
+                data_service(),
+                service_provider(),
+                value,
+            )
+            .unwrap(),
+            signer,
+        )
+        .unwrap()
+    }
+
+    #[rstest]
+    #[test]
+    /// The RAV must be signed by the key belonging to the payer named in the receipts.
+    ///
+    /// The collector recovers the RAV signer and requires it to be authorized for the RAV's
+    /// payer, so signing payer A's receipts with payer B's key yields a RAV that is rejected
+    /// by the indexer and uncollectable on chain.
+    fn signs_each_payer_with_its_own_key(domain_separator: Eip712Domain) {
+        let (payer_a, payer_b) = (Address::repeat_byte(0xa1), Address::repeat_byte(0xb2));
+        let (signer_a, signer_b) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let registry = two_payer_registry(payer_a, &signer_a, payer_b, &signer_b);
+
+        for (payer, expected) in [(payer_a, &signer_a), (payer_b, &signer_b)] {
+            let receipts = vec![receipt_for(&domain_separator, payer, expected, 42)];
+            let rav =
+                super::check_and_aggregate_receipts(&domain_separator, &receipts, None, &registry)
+                    .unwrap();
+            assert_eq!(rav.message.payer, payer);
+            assert_eq!(
+                rav.recover_signer(&domain_separator).unwrap(),
+                expected.address(),
+            );
+        }
+    }
+
+    #[rstest]
+    #[test]
+    /// A payer with no configured key is refused rather than signed with whatever key is at
+    /// hand. Refusing is a loud failure; signing anyway is a silent one discovered days later.
+    fn refuses_a_payer_it_holds_no_key_for(domain_separator: Eip712Domain) {
+        let (payer_a, payer_b) = (Address::repeat_byte(0xa1), Address::repeat_byte(0xb2));
+        let (signer_a, signer_b) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let registry = two_payer_registry(payer_a, &signer_a, payer_b, &signer_b);
+
+        let unknown = Address::repeat_byte(0xcc);
+        let receipts = vec![receipt_for(&domain_separator, unknown, &signer_a, 42)];
+        let err =
+            super::check_and_aggregate_receipts(&domain_separator, &receipts, None, &registry)
+                .unwrap_err();
+        assert!(err.to_string().contains("no signing key configured"));
+    }
+
+    #[rstest]
+    #[test]
+    /// Accepted signers are scoped per payer, so one payer's signer cannot vouch for another's
+    /// receipts. This is the case that turns a payer migration into uncollectable RAVs: the
+    /// receipts are accepted, the RAV carries the old payer, and the new key signs it.
+    fn rejects_a_signer_belonging_to_a_different_payer(domain_separator: Eip712Domain) {
+        let (payer_a, payer_b) = (Address::repeat_byte(0xa1), Address::repeat_byte(0xb2));
+        let (signer_a, signer_b) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let registry = two_payer_registry(payer_a, &signer_a, payer_b, &signer_b);
+
+        // Receipts claiming payer A, signed by payer B's signer.
+        let receipts = vec![receipt_for(&domain_separator, payer_a, &signer_b, 42)];
+        let err =
+            super::check_and_aggregate_receipts(&domain_separator, &receipts, None, &registry)
+                .unwrap_err();
+        assert!(err.to_string().contains(&signer_b.address().to_string()));
+    }
+
+    #[rstest]
+    #[test]
+    /// A rotation *within* one payer is still supported: receipts from the payer's previous
+    /// signer aggregate into a RAV signed by its current one. Both keys are authorized for
+    /// that same payer on chain, so the result is valid.
+    fn accepts_a_previous_signer_of_the_same_payer(domain_separator: Eip712Domain) {
+        let payer = Address::repeat_byte(0xa1);
+        let (old_signer, new_signer) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let registry = SignerRegistry::build(
+            [(payer, new_signer.clone())],
+            [(payer, old_signer.address())],
+        )
+        .unwrap();
+
+        let receipts = vec![receipt_for(&domain_separator, payer, &old_signer, 42)];
+        let rav =
+            super::check_and_aggregate_receipts(&domain_separator, &receipts, None, &registry)
+                .unwrap();
+        assert_eq!(rav.message.payer, payer);
+        assert_eq!(
+            rav.recover_signer(&domain_separator).unwrap(),
+            new_signer.address(),
+        );
     }
 
     #[rstest]

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Debug, str::FromStr, time::Duration};
+use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use axum::{error_handling::HandleError, routing::post_service, BoxError, Router};
@@ -12,9 +12,7 @@ use jsonrpsee::{
 use lazy_static::lazy_static;
 use log::{error, info};
 use prometheus::{register_counter, register_int_counter, Counter, IntCounter};
-use thegraph_core::alloy::{
-    dyn_abi::Eip712Domain, primitives::Address, signers::local::PrivateKeySigner,
-};
+use thegraph_core::alloy::{dyn_abi::Eip712Domain, primitives::Address};
 use tokio::{net::TcpListener, signal, task::JoinHandle};
 use tonic::{codec::CompressionEncoding, service::Routes, Request, Response, Status};
 use tower::{layer::util::Identity, make::Shared};
@@ -31,6 +29,7 @@ use crate::{
     error_codes::{JsonRpcErrorCode, JsonRpcWarningCode},
     grpc::graph_tally,
     jsonrpsee_helpers::{JsonRpcError, JsonRpcResponse, JsonRpcResult, JsonRpcWarning},
+    signers::SignerRegistry,
 };
 
 // Register the metrics into the global metrics registry.
@@ -108,8 +107,9 @@ pub trait Rpc {
 
 #[derive(Clone)]
 struct RpcImpl {
-    wallet: PrivateKeySigner,
-    accepted_addresses: HashSet<Address>,
+    // Shared rather than cloned per request: it holds private keys, and cloning them into
+    // every connection handler serves no purpose.
+    signers: Arc<SignerRegistry>,
     domain_separator: Eip712Domain,
     kafka: Option<rdkafka::producer::ThreadedProducer<rdkafka::producer::DefaultProducerContext>>,
 }
@@ -145,8 +145,7 @@ fn check_api_version_deprecation(api_version: &GraphTallyRpcApiVersion) -> Optio
 
 fn aggregate_receipts_(
     api_version: String,
-    wallet: &PrivateKeySigner,
-    accepted_addresses: &HashSet<Address>,
+    signers: &SignerRegistry,
     domain_separator: &Eip712Domain,
     receipts: Vec<Eip712SignedMessage<Receipt>>,
     previous_rav: Option<Eip712SignedMessage<ReceiptAggregateVoucher>>,
@@ -183,8 +182,7 @@ fn aggregate_receipts_(
         domain_separator,
         &receipts,
         previous_rav,
-        wallet,
-        accepted_addresses,
+        signers,
     );
 
     // Handle aggregation error
@@ -226,8 +224,7 @@ impl v2::tap_aggregator_server::TapAggregator for RpcImpl {
             &self.domain_separator,
             receipts.as_slice(),
             previous_rav,
-            &self.wallet,
-            &self.accepted_addresses,
+            &self.signers,
         ) {
             Ok(res) => {
                 TOTAL_GRT_AGGREGATED.inc_by(receipts_grt as f64);
@@ -282,8 +279,7 @@ impl graph_tally::graph_tally_aggregator_server::GraphTallyAggregator for RpcImp
             &self.domain_separator,
             receipts.as_slice(),
             previous_rav,
-            &self.wallet,
-            &self.accepted_addresses,
+            &self.signers,
         ) {
             Ok(res) => {
                 TOTAL_GRT_AGGREGATED.inc_by(receipts_grt as f64);
@@ -332,8 +328,7 @@ impl RpcServer for RpcImpl {
 
         match aggregate_receipts_(
             api_version,
-            &self.wallet,
-            &self.accepted_addresses,
+            &self.signers,
             &self.domain_separator,
             receipts,
             previous_rav,
@@ -345,7 +340,7 @@ impl RpcServer for RpcImpl {
                 if let Some(kafka) = &self.kafka {
                     produce_kafka_records(
                         kafka,
-                        &self.wallet.address(),
+                        &res.data.message.payer,
                         &res.data.message.collectionId,
                         res.data.message.valueAggregate,
                     );
@@ -363,8 +358,7 @@ impl RpcServer for RpcImpl {
 #[allow(clippy::too_many_arguments)]
 pub async fn run_server(
     port: u16,
-    wallet: PrivateKeySigner,
-    accepted_addresses: HashSet<Address>,
+    signers: Arc<SignerRegistry>,
     domain_separator: Eip712Domain,
     max_request_body_size: u32,
     max_response_body_size: u32,
@@ -374,8 +368,7 @@ pub async fn run_server(
 ) -> Result<(JoinHandle<()>, std::net::SocketAddr)> {
     // Setting up the JSON RPC server
     let rpc_impl = RpcImpl {
-        wallet,
-        accepted_addresses,
+        signers,
         domain_separator,
         kafka,
     };
@@ -544,7 +537,7 @@ fn produce_kafka_records<K: Debug>(
 #[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 mod tests {
-    use std::{collections::HashSet, str::FromStr, time::Duration};
+    use std::{str::FromStr, sync::Arc, time::Duration};
 
     use graph_tally_core::{graph_tally_eip712_domain, signed_message::Eip712SignedMessage};
     use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
@@ -556,7 +549,7 @@ mod tests {
         signers::local::PrivateKeySigner,
     };
 
-    use crate::server;
+    use crate::{server, signers::SignerRegistry};
 
     #[derive(Clone)]
     struct Keys {
@@ -618,6 +611,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn protocol_version(
+        payer: Address,
         domain_separator: Eip712Domain,
         http_request_size_limit: u32,
         http_response_size_limit: u32,
@@ -630,8 +624,7 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            keys_main.wallet,
-            HashSet::from([keys_main.address]),
+            Arc::new(SignerRegistry::build([(payer, keys_main.wallet.clone())], []).unwrap()),
             domain_separator,
             http_request_size_limit,
             http_response_size_limit,
@@ -687,8 +680,13 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            keys_main.wallet.clone(),
-            HashSet::from([keys_main.address, keys_0.address, keys_1.address]),
+            Arc::new(
+                SignerRegistry::build(
+                    [(payer, keys_main.wallet.clone())],
+                    [(payer, keys_0.address), (payer, keys_1.address)],
+                )
+                .unwrap(),
+            ),
             domain_separator.clone(),
             http_request_size_limit,
             http_response_size_limit,
@@ -782,8 +780,13 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            keys_main.wallet.clone(),
-            HashSet::from([keys_main.address, keys_0.address, keys_1.address]),
+            Arc::new(
+                SignerRegistry::build(
+                    [(payer, keys_main.wallet.clone())],
+                    [(payer, keys_0.address), (payer, keys_1.address)],
+                )
+                .unwrap(),
+            ),
             domain_separator.clone(),
             http_request_size_limit,
             http_response_size_limit,
@@ -869,8 +872,7 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            keys_main.wallet.clone(),
-            HashSet::from([keys_main.address]),
+            Arc::new(SignerRegistry::build([(payer, keys_main.wallet.clone())], []).unwrap()),
             domain_separator.clone(),
             http_request_size_limit,
             http_response_size_limit,
@@ -966,8 +968,7 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            keys_main.wallet.clone(),
-            HashSet::from([keys_main.address]),
+            Arc::new(SignerRegistry::build([(payer, keys_main.wallet.clone())], []).unwrap()),
             domain_separator.clone(),
             http_request_size_limit,
             http_response_size_limit,
