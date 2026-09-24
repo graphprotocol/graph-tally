@@ -134,7 +134,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut allowance = contracts.allowance().await?;
     let expected_allowance = config.grt_allowance as u128 * GRT;
-    tracing::info!(allowance = allowance as f64 * 1e-18);
+    tracing::info!(allowance = %format_allowance(allowance));
     if allowance < expected_allowance {
         if config.dry_run {
             tracing::info!(
@@ -147,7 +147,7 @@ async fn main() -> anyhow::Result<()> {
                 .await
                 .context("approve")?;
             allowance = contracts.allowance().await?;
-            tracing::info!(allowance = allowance as f64 * 1e-18);
+            tracing::info!(allowance = %format_allowance(allowance));
         }
     }
 
@@ -490,6 +490,15 @@ async fn main() -> anyhow::Result<()> {
         metrics::METRICS
             .loop_duration
             .observe(loop_start.elapsed().as_secs_f64());
+    }
+}
+
+/// `u128::MAX` is what `Contracts::allowance` saturates an unlimited on-chain approval to. Printed
+/// as GRT it reads as 3.4e20, which looks like a real (absurd) number rather than "no limit set".
+fn format_allowance(allowance: u128) -> String {
+    match allowance {
+        u128::MAX => "unlimited".to_string(),
+        allowance => format!("{}", allowance as f64 * 1e-18),
     }
 }
 
