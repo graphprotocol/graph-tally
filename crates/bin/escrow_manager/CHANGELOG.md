@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/graphprotocol/graph-tally/compare/graph_tally_escrow_manager-v2.2.0...graph_tally_escrow_manager-v2.2.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **escrow:** unbounded u128 ([#25](https://github.com/graphprotocol/graph-tally/issues/25)) ([f10686b](https://github.com/graphprotocol/graph-tally/commit/f10686b15e3be33b26e0cca2e029940d3b761fb5))
+
 ## [2.2.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_escrow_manager-v2.1.0...graph_tally_escrow_manager-v2.2.0) (2026-09-22)
 
 
