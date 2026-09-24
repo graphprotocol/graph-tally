@@ -84,14 +84,17 @@ impl Contracts {
         *self.graph_tally_collector.address()
     }
 
+    /// Saturates at `u128::MAX`. An unlimited approval (`U256::MAX`) doesn't fit in `u128`, and the
+    /// only thing done with this value is comparing it against the configured allowance, which any
+    /// saturated value clears. Returning an error here instead bricked the whole process on startup.
     pub async fn allowance(&self) -> anyhow::Result<u128> {
-        self.token
+        let allowance = self
+            .token
             .allowance(self.payer(), *self.payments_escrow.address())
             .call()
             .await
-            .context("get allowance")?
-            .try_into()
-            .context("result out of bounds")
+            .context("get allowance")?;
+        Ok(u128::try_from(allowance).unwrap_or(u128::MAX))
     }
 
     pub async fn approve(&self, amount: u128) -> anyhow::Result<()> {
