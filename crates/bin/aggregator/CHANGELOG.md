@@ -31,6 +31,17 @@
 
 
 
+## [0.8.0](https://github.com/graphprotocol/graph-tally/compare/graph_tally_aggregator-v0.7.1...graph_tally_aggregator-v0.8.0) (2026-09-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **aggregator:** support multiple payer-signer pairs ([#23](https://github.com/graphprotocol/graph-tally/issues/23))
+
+### Features
+
+* **aggregator:** support multiple payer-signer pairs ([#23](https://github.com/graphprotocol/graph-tally/issues/23)) ([b832ac8](https://github.com/graphprotocol/graph-tally/commit/b832ac8f87e38826408f9696bbac144977858d46))
+
 ## [0.7.1](https://github.com/graphprotocol/graph-tally/compare/graph_tally_aggregator-v0.7.0...graph_tally_aggregator-v0.7.1) (2026-05-04)
 
 
