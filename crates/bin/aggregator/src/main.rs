@@ -4,7 +4,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context as _, Result};
 use clap::Parser;
-use graph_tally_aggregator::{metrics, server, signers, signers::SignerRegistry};
+use graph_tally_aggregator::{metrics, server, signers::SignerRegistry};
 use graph_tally_core::graph_tally_eip712_domain;
 use log::{debug, info};
 use thegraph_core::alloy::{
@@ -215,7 +215,7 @@ fn signer_registry(signers: &str, accepted_signers: Option<&str>) -> Result<Sign
         })
         .collect::<Result<Vec<_>>>()?;
 
-    signers::build(signing_keys, accepted).context("GRAPH_TALLY_SIGNERS")
+    SignerRegistry::build(signing_keys, accepted).context("GRAPH_TALLY_SIGNERS")
 }
 
 /// Creates the Graph Tally EIP-712 domain separator based on the provided arguments

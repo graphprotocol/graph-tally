@@ -11,10 +11,7 @@ use std::{
 };
 
 use anyhow::{Error, Result};
-use graph_tally_aggregator::{
-    jsonrpsee_helpers, server as agg_server,
-    signers::{PayerKeys, SignerRegistry},
-};
+use graph_tally_aggregator::{jsonrpsee_helpers, server as agg_server, signers::SignerRegistry};
 use graph_tally_core::{
     graph_tally_eip712_domain,
     manager::context::memory::{checks::get_full_list_of_checks, *},
@@ -887,10 +884,7 @@ async fn start_sender_aggregator(
 
     // The registry is keyed by payer, and every receipt these tests build carries the `payer`
     // fixture, so that is the one payer this aggregator serves.
-    let signers = Arc::new(SignerRegistry::new(HashMap::from([(
-        payer(),
-        PayerKeys::new(keys, []),
-    )])));
+    let signers = Arc::new(SignerRegistry::build([(payer(), keys)], []).unwrap());
 
     let (server_handle, socket_addr) = agg_server::run_server(
         http_port,

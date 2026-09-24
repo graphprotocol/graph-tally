@@ -1,10 +1,10 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+use std::{str::FromStr, sync::Arc, time::Duration};
 
 use graph_tally_aggregator::{
     grpc::graph_tally::{graph_tally_aggregator_client::GraphTallyAggregatorClient, RavRequest},
     jsonrpsee_helpers::JsonRpcResponse,
     server,
-    signers::{PayerKeys, SignerRegistry},
+    signers::SignerRegistry,
 };
 use graph_tally_core::{graph_tally_eip712_domain, signed_message::Eip712SignedMessage};
 use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
@@ -29,10 +29,7 @@ async fn aggregation_test() {
 
     let (join_handle, local_addr) = server::run_server(
         0,
-        Arc::new(SignerRegistry::new(HashMap::from([(
-            payer,
-            PayerKeys::new(wallet.clone(), []),
-        )]))),
+        Arc::new(SignerRegistry::build([(payer, wallet.clone())], []).unwrap()),
         domain_separator.clone(),
         max_request_body_size,
         max_response_body_size,

@@ -537,7 +537,7 @@ fn produce_kafka_records<K: Debug>(
 #[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+    use std::{str::FromStr, sync::Arc, time::Duration};
 
     use graph_tally_core::{graph_tally_eip712_domain, signed_message::Eip712SignedMessage};
     use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
@@ -549,10 +549,7 @@ mod tests {
         signers::local::PrivateKeySigner,
     };
 
-    use crate::{
-        server,
-        signers::{PayerKeys, SignerRegistry},
-    };
+    use crate::{server, signers::SignerRegistry};
 
     #[derive(Clone)]
     struct Keys {
@@ -627,10 +624,7 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            Arc::new(SignerRegistry::new(HashMap::from([(
-                payer,
-                PayerKeys::new(keys_main.wallet.clone(), []),
-            )]))),
+            Arc::new(SignerRegistry::build([(payer, keys_main.wallet.clone())], []).unwrap()),
             domain_separator,
             http_request_size_limit,
             http_response_size_limit,
@@ -686,10 +680,13 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            Arc::new(SignerRegistry::new(HashMap::from([(
-                payer,
-                PayerKeys::new(keys_main.wallet.clone(), [keys_0.address, keys_1.address]),
-            )]))),
+            Arc::new(
+                SignerRegistry::build(
+                    [(payer, keys_main.wallet.clone())],
+                    [(payer, keys_0.address), (payer, keys_1.address)],
+                )
+                .unwrap(),
+            ),
             domain_separator.clone(),
             http_request_size_limit,
             http_response_size_limit,
@@ -783,10 +780,13 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            Arc::new(SignerRegistry::new(HashMap::from([(
-                payer,
-                PayerKeys::new(keys_main.wallet.clone(), [keys_0.address, keys_1.address]),
-            )]))),
+            Arc::new(
+                SignerRegistry::build(
+                    [(payer, keys_main.wallet.clone())],
+                    [(payer, keys_0.address), (payer, keys_1.address)],
+                )
+                .unwrap(),
+            ),
             domain_separator.clone(),
             http_request_size_limit,
             http_response_size_limit,
@@ -872,10 +872,7 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            Arc::new(SignerRegistry::new(HashMap::from([(
-                payer,
-                PayerKeys::new(keys_main.wallet.clone(), []),
-            )]))),
+            Arc::new(SignerRegistry::build([(payer, keys_main.wallet.clone())], []).unwrap()),
             domain_separator.clone(),
             http_request_size_limit,
             http_response_size_limit,
@@ -971,10 +968,7 @@ mod tests {
         // Start the JSON-RPC server.
         let (handle, local_addr) = server::run_server(
             0,
-            Arc::new(SignerRegistry::new(HashMap::from([(
-                payer,
-                PayerKeys::new(keys_main.wallet.clone(), []),
-            )]))),
+            Arc::new(SignerRegistry::build([(payer, keys_main.wallet.clone())], []).unwrap()),
             domain_separator.clone(),
             http_request_size_limit,
             http_response_size_limit,

@@ -196,8 +196,6 @@ fn check_receipt_timestamps(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use graph_tally_core::{graph_tally_eip712_domain, signed_message::Eip712SignedMessage};
     use graph_tally_graph::{Receipt, ReceiptAggregateVoucher};
     use rstest::*;
@@ -207,7 +205,7 @@ mod tests {
         signers::local::PrivateKeySigner,
     };
 
-    use crate::signers::{PayerKeys, SignerRegistry};
+    use crate::signers::SignerRegistry;
 
     #[fixture]
     fn keys() -> (PrivateKeySigner, Address) {
@@ -252,10 +250,11 @@ mod tests {
         payer_b: Address,
         signer_b: &PrivateKeySigner,
     ) -> SignerRegistry {
-        SignerRegistry::new(HashMap::from([
-            (payer_a, PayerKeys::new(signer_a.clone(), [])),
-            (payer_b, PayerKeys::new(signer_b.clone(), [])),
-        ]))
+        SignerRegistry::build(
+            [(payer_a, signer_a.clone()), (payer_b, signer_b.clone())],
+            [],
+        )
+        .unwrap()
     }
 
     fn receipt_for(
@@ -347,10 +346,11 @@ mod tests {
     fn accepts_a_previous_signer_of_the_same_payer(domain_separator: Eip712Domain) {
         let payer = Address::repeat_byte(0xa1);
         let (old_signer, new_signer) = (PrivateKeySigner::random(), PrivateKeySigner::random());
-        let registry = SignerRegistry::new(HashMap::from([(
-            payer,
-            PayerKeys::new(new_signer.clone(), [old_signer.address()]),
-        )]));
+        let registry = SignerRegistry::build(
+            [(payer, new_signer.clone())],
+            [(payer, old_signer.address())],
+        )
+        .unwrap();
 
         let receipts = vec![receipt_for(&domain_separator, payer, &old_signer, 42)];
         let rav =
