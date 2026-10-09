@@ -1,0 +1,76 @@
+groups:
+  - name: Escrow Manager
+    interval: 1m
+    labels:
+      team: Smart Contracts
+      environment: production
+    rules:
+      - alert: EscrowManagerDown
+        expr: >-
+          up{job="default/tap-escrow-manager-mainnet"} == 0
+          or absent(up{job="default/tap-escrow-manager-mainnet"})
+        for: 5m
+        labels:
+          priority: P2-High
+        annotations:
+          summary: Escrow manager is down or not being scraped
+          description: >-
+            No successful scrape of {{ $labels.job }} for 5 minutes. While it is down, no escrow
+            is deposited, so receivers become underfunded as debt grows.
+          __dashboardUid__: graph-tally-escrow-manager
+          __panelId__: "17"
+
+      # The loop skips to the next cycle when it cannot read the network subgraph, before the
+      # duration is observed. The process stays up and the gauges keep their last values, so this
+      # is the only signal that the cycle is not running.
+      - alert: EscrowManagerStalled
+        expr: >-
+          sum by (job) (increase(escrow_loop_duration_seconds_count{job="default/tap-escrow-manager-mainnet"}[15m])) == 0
+        for: 5m
+        labels:
+          priority: P2-High
+        annotations:
+          summary: Escrow manager is running but not completing cycles
+          description: >-
+            {{ $labels.job }} has completed no cycle in the last 15 minutes. Check the logs for
+            network subgraph errors. Escrow metrics on the dashboard are stale until this resolves.
+          __dashboardUid__: graph-tally-escrow-manager
+          __panelId__: "7"
+
+      # Per-receiver gauges are never removed. A receiver that leaves the tracked set while this is
+      # firing keeps it firing until the pod restarts.
+      - alert: EscrowReceiverUnderfunded
+        expr: >-
+          (
+            escrow_debt_grt{job="default/tap-escrow-manager-mainnet"}
+            - (escrow_balance_grt{job="default/tap-escrow-manager-mainnet"} - escrow_thawing_grt{job="default/tap-escrow-manager-mainnet"})
+          ) > 0
+        for: 15m
+        labels:
+          priority: P1-High
+        annotations:
+          summary: "Receiver {{ $labels.receiver }} has less escrow than debt"
+          description: >-
+            Receiver {{ $labels.receiver }} is owed {{ $value | printf "%.2f" }} GRT more than its
+            escrow balance (net of thawing) can cover, for 15 minutes. It cannot collect the full
+            amount. Check for failed or capped deposits.
+          __dashboardUid__: graph-tally-escrow-manager
+          __panelId__: "16"
+
+      # Deposit counters start at 1 on process start, so a restart adds to both and does not
+      # match `ok == 0`.
+      - alert: EscrowDepositsFailing
+        expr: >-
+          sum by (job) (increase(escrow_deposit_err{job="default/tap-escrow-manager-mainnet"}[30m])) >= 2
+          and
+          sum by (job) (increase(escrow_deposit_ok{job="default/tap-escrow-manager-mainnet"}[30m])) == 0
+        labels:
+          priority: P1-High
+        annotations:
+          summary: Escrow deposits are failing
+          description: >-
+            {{ $labels.job }} had {{ $value | printf "%.0f" }} failed deposit transactions and no
+            successful one in the last 30 minutes. Check the payer wallet GRT and ETH balance,
+            the GRT allowance, and the RPC provider.
+          __dashboardUid__: graph-tally-escrow-manager
+          __panelId__: "9"
