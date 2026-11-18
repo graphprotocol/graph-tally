@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.2](https://github.com/graphprotocol/graph-tally/compare/graph_tally_escrow_manager-v2.2.1...graph_tally_escrow_manager-v2.2.2) (2026-11-18)
+
+
+### Bug Fixes
+
+* **escrow_manager:** fix RAVs being ignored fot debt calculation ([#30](https://github.com/graphprotocol/graph-tally/issues/30)) ([ed76ce6](https://github.com/graphprotocol/graph-tally/commit/ed76ce69b6dbb4324691ecf27a6c997700717b65))
+
 ## [2.2.1](https://github.com/graphprotocol/graph-tally/compare/graph_tally_escrow_manager-v2.2.0...graph_tally_escrow_manager-v2.2.1) (2026-09-24)
 
 
