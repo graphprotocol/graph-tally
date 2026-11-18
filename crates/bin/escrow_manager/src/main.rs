@@ -152,10 +152,10 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let signers: Vec<Address> = signers.into_iter().map(|s| s.address()).collect();
-    let receipts = kafka::receipts(&config.kafka, signers.clone())
+    let receipts = kafka::receipts(&config.kafka, signers)
         .await
         .context("failed to start receipts consumer")?;
-    let ravs = kafka::ravs(&config.kafka, signers)
+    let ravs = kafka::ravs(&config.kafka, contracts.payer())
         .await
         .context("failed to start RAVs consumer")?;
 

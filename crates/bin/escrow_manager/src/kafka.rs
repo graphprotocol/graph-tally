@@ -287,21 +287,23 @@ mod ravs {
     use super::consumer;
     use crate::config;
 
+    /// RAVs on `gateway_ravs` are keyed by payer, not signer, so only those for `payer` count
+    /// toward its escrow debt.
     pub async fn ravs(
         config: &config::Kafka,
-        signers: Vec<Address>,
+        payer: Address,
     ) -> anyhow::Result<watch::Receiver<BTreeMap<Address, u128>>> {
         let (tx, rx) = watch::channel(Default::default());
         let mut consumer = consumer(config)?;
         assign_partitions(&consumer, &["gateway_ravs"], 0).await?;
-        tokio::spawn(async move { process_messages(&mut consumer, tx, signers).await });
+        tokio::spawn(async move { process_messages(&mut consumer, tx, payer).await });
         Ok(rx)
     }
 
     async fn process_messages(
         consumer: &mut StreamConsumer,
         tx: watch::Sender<BTreeMap<Address, u128>>,
-        signers: Vec<Address>,
+        payer: Address,
     ) {
         consumer
             .stream()
@@ -313,7 +315,7 @@ mod ravs {
                         return;
                     }
                 };
-                let record = match parse_record(&msg) {
+                let record = match parse_message(&msg) {
                     Ok(ParseResult::V2(record)) => record,
                     Ok(ParseResult::V1) => return,
                     Err(record_parse_err) => {
@@ -323,7 +325,7 @@ mod ravs {
                         return;
                     }
                 };
-                if !signers.contains(&record.signer) {
+                if record.payer != payer {
                     return;
                 }
                 tx.send_if_modified(|map| {
@@ -344,21 +346,28 @@ mod ravs {
             .await;
     }
 
+    #[derive(Debug)]
     struct Record {
-        signer: Address,
+        payer: Address,
         allocation: Address,
         value: u128,
     }
 
+    #[derive(Debug)]
     enum ParseResult {
         V2(Record),
         V1,
     }
 
-    fn parse_record(msg: &rdkafka::message::BorrowedMessage) -> anyhow::Result<ParseResult> {
+    fn parse_message(msg: &rdkafka::message::BorrowedMessage) -> anyhow::Result<ParseResult> {
         let key = String::from_utf8_lossy(msg.key().context("missing key")?);
         let payload = String::from_utf8_lossy(msg.payload().context("missing payload")?);
-        let (signer, id) = key.split_once(':').context("malformed key")?;
+        parse_record(&key, &payload)
+    }
+
+    /// Parses a record produced by the aggregator, keyed `"{payer}:{collection_id}"`.
+    fn parse_record(key: &str, payload: &str) -> anyhow::Result<ParseResult> {
+        let (payer, id) = key.split_once(':').context("malformed key")?;
         // V1: allocation ID is 20 bytes (42 chars with 0x prefix)
         // V2: collection ID is 32 bytes (66 chars with 0x prefix)
         if id.len() == 42 {
@@ -368,9 +377,45 @@ mod ravs {
         // Allocation ID is the last 20 bytes of collection ID
         let allocation = &id[26..]; // skip "0x" + 24 zero chars (12 bytes padding)
         Ok(ParseResult::V2(Record {
-            signer: signer.parse()?,
+            payer: payer.parse()?,
             allocation: allocation.parse()?,
             value: payload.parse()?,
         }))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use alloy::primitives::{address, Address, FixedBytes};
+
+        use super::{parse_record, ParseResult, Record};
+
+        /// Builds a key exactly as the aggregator does in `produce_kafka_records`.
+        fn aggregator_key(payer: Address, allocation: Address) -> String {
+            let collection_id: FixedBytes<32> = allocation.into_word();
+            format!("{payer:?}:{collection_id:?}")
+        }
+
+        fn parse_v2(key: &str, payload: &str) -> Record {
+            match parse_record(key, payload).unwrap() {
+                ParseResult::V2(record) => record,
+                ParseResult::V1 => panic!("expected a V2 record"),
+            }
+        }
+
+        #[test]
+        fn parses_payer_from_aggregator_key() {
+            let payer = address!("0x1111111111111111111111111111111111111111");
+            let allocation = address!("0x2222222222222222222222222222222222222222");
+            let record = parse_v2(&aggregator_key(payer, allocation), "1000");
+            assert_eq!(record.payer, payer);
+            assert_eq!(record.allocation, allocation);
+            assert_eq!(record.value, 1000);
+        }
+
+        #[test]
+        fn skips_v1_keys() {
+            let key = format!("{:?}:{:?}", Address::ZERO, Address::ZERO);
+            assert!(matches!(parse_record(&key, "1"), Ok(ParseResult::V1)));
+        }
     }
 }
